@@ -99,7 +99,8 @@ def api_search():
             yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
         return Response(stream_with_context(_err()), mimetype="text/event-stream")
 
-    MAX_EVALS = 20_000_000  # 20 M evaluations per request
+    # Soft warning threshold: search proceeds regardless of size
+    WARN_EVALS = 100_000_000  # warn above 100 M
 
     def sse(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n"
@@ -148,15 +149,15 @@ def api_search():
             x_count     = x_max - x_min + 1
             total_evals = n_count * x_count
 
-        if total_evals > MAX_EVALS:
+        if total_evals > WARN_EVALS:
             yield sse({
-                "type": "error",
+                "type": "warning",
                 "message": (
-                    f"Search space is {total_evals:,} evaluations "
-                    f"(max {MAX_EVALS:,}). Please reduce the range."
+                    f"Large search: {total_evals:,} evaluations. "
+                    "Results stream as found — click Stop any time."
                 ),
             })
-            return
+        # No hard limit: search always proceeds.
 
         yield sse({"type": "start", "n_count": n_count,
                    "x_count": x_count, "total_evals": total_evals,

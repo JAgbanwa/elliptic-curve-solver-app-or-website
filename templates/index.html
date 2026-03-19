@@ -126,8 +126,8 @@
             </div>
           </div>
           <p class="hint">
-            x is always searched over integers.  Evaluation budget: up to
-            <strong>20 million</strong> (n-count × x-range).
+            x is always searched over integers. No hard limit —
+            results stream live. Use <strong>Stop</strong> any time.
           </p>
         </div>
       </section>
@@ -158,6 +158,9 @@
           Searching… 0% &nbsp;|&nbsp; n = — &nbsp;|&nbsp; solutions: 0
         </div>
       </div>
+
+      <!-- Warning banner (shown for large searches) -->
+      <div id="search-warning" class="warning-banner" style="display:none"></div>
 
       <!-- Status / summary -->
       <div id="status-area" class="status-idle">

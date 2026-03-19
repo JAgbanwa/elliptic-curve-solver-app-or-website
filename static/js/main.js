@@ -189,6 +189,8 @@ function clearResults() {
   progressFill.style.width = "0%";
   const ns = document.getElementById("n-summary-section");
   if (ns) ns.style.display = "none";
+  const wb = document.getElementById("search-warning");
+  if (wb) { wb.style.display = "none"; wb.textContent = ""; }
 }
 
 function addRows(batch) {
@@ -255,6 +257,12 @@ function startSearch() {
     catch { return; }
 
     switch (msg.type) {
+      case "warning": {
+        const wb = document.getElementById("search-warning");
+        if (wb) { wb.textContent = "\u26a0 " + msg.message; wb.style.display = "block"; }
+        break;
+      }
+
       case "start":
         nTotalCount = msg.n_count;
         if (msg.x_scale > 0) {
