@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elliptic Curve Integer Point Finder</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  <!-- KaTeX for math rendering -->
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css"
+        integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww"
+        crossorigin="anonymous" />
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js"
+          integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBzIvx"
+          crossorigin="anonymous"></script>
+</head>
+<body>
+  <!-- ─── HEADER ──────────────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo-group">
+        <span class="logo-icon">∮</span>
+        <div>
+          <h1 class="site-title">Elliptic Curve Solver</h1>
+          <p class="site-sub">Search for rational <em>n</em> where <strong>y² = f(n, x)</strong> has integer points</p>
+        </div>
+      </div>
+      <nav class="header-nav">
+        <a class="nav-link" href="#how-it-works">How it works</a>
+        <a class="nav-link" href="#examples">Examples</a>
+        <a class="nav-link btn-outline" href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-grid">
+
+    <!-- ─── LEFT PANEL: Inputs ───────────────────────────────────────────── -->
+    <aside class="panel panel-inputs">
+      <h2 class="panel-title">Configure Search</h2>
+
+      <!-- Curve expression -->
+      <section class="param-section">
+        <label class="param-label" for="expr-input">
+          Right-hand side &nbsp;— &nbsp;
+          <span class="dim">y² = </span><strong>f(n, x)</strong>
+        </label>
+        <input id="expr-input" class="text-input" type="text"
+               placeholder="e.g. x**3 - n**2*x"
+               value="x**3 - n**2*x" autocomplete="off" spellcheck="false" />
+        <div class="preview-box" id="latex-preview">
+          <span class="dim">LaTeX preview loads here…</span>
+        </div>
+        <p class="hint">
+          Use Python syntax: <code>**</code> for powers, <code>*</code> for
+          multiplication.  Variables: <code>n</code> and <code>x</code>.
+          You may also use <code>^</code> for powers.
+        </p>
+      </section>
+
+      <!-- n range -->
+      <section class="param-section">
+        <div class="range-group">
+          <div class="range-field">
+            <label class="param-label" for="n-min">n&nbsp;min</label>
+            <input id="n-min" class="num-input" type="number" value="-10" />
+          </div>
+          <div class="range-field">
+            <label class="param-label" for="n-max">n&nbsp;max</label>
+            <input id="n-max" class="num-input" type="number" value="10" />
+          </div>
+          <div class="range-field">
+            <label class="param-label" for="n-denom">
+              n denominator
+              <span class="tooltip-wrap">
+                <span class="tooltip-icon">?</span>
+                <span class="tooltip-text">
+                  Set to 1 for integer n.  Set to 2 to also try ½, 3/2, …
+                  Set to 6 to include all fractions with denominator up to 6.
+                </span>
+              </span>
+            </label>
+            <input id="n-denom" class="num-input" type="number" value="1" min="1" max="100" />
+          </div>
+        </div>
+      </section>
+
+      <!-- x range -->
+      <section class="param-section">
+        <div class="range-group">
+          <div class="range-field">
+            <label class="param-label" for="x-min">x&nbsp;min</label>
+            <input id="x-min" class="num-input" type="number" value="-100" />
+          </div>
+          <div class="range-field">
+            <label class="param-label" for="x-max">x&nbsp;max</label>
+            <input id="x-max" class="num-input" type="number" value="100" />
+          </div>
+        </div>
+        <p class="hint">
+          x is always searched over integers.  Evaluation budget: up to
+          <strong>20 million</strong> (n-count × x-range).
+        </p>
+      </section>
+
+      <!-- Action -->
+      <div class="btn-row">
+        <button id="btn-search" class="btn btn-primary" type="button">
+          <span class="btn-icon">▶</span> Run Search
+        </button>
+        <button id="btn-stop" class="btn btn-danger" type="button" disabled>
+          &#9632; Stop
+        </button>
+        <button id="btn-clear" class="btn btn-ghost" type="button">
+          Clear
+        </button>
+      </div>
+    </aside>
+
+    <!-- ─── RIGHT PANEL: Results ─────────────────────────────────────────── -->
+    <section class="panel panel-results">
+
+      <!-- Progress bar -->
+      <div class="progress-header" id="progress-area" style="display:none">
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="progress-stats" id="progress-stats">
+          Searching… 0% &nbsp;|&nbsp; n = — &nbsp;|&nbsp; solutions: 0
+        </div>
+      </div>
+
+      <!-- Status / summary -->
+      <div id="status-area" class="status-idle">
+        Enter a curve expression and click <strong>Run Search</strong>.
+      </div>
+
+      <!-- Solutions table -->
+      <div id="table-wrap" style="display:none">
+        <div class="table-header-row">
+          <h3 class="table-title">Integer Points Found</h3>
+          <div class="table-actions">
+            <span id="solution-count" class="badge">0 solutions</span>
+            <button id="btn-export" class="btn btn-ghost btn-sm" type="button">
+              ⬇ Export CSV
+            </button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table id="results-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>n</th>
+                <th>x</th>
+                <th>y</th>
+                <th>Verify&nbsp;(y² = f(n,x))</th>
+              </tr>
+            </thead>
+            <tbody id="results-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state" style="display:none">
+        <span class="empty-icon">∅</span>
+        <p>No integer points found in the given range.</p>
+        <p class="dim">Try widening the x or n range, or adjusting the curve.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ─── HOW IT WORKS ────────────────────────────────────────────────────── -->
+  <section id="how-it-works" class="info-section">
+    <div class="info-inner">
+      <h2>How It Works</h2>
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="info-icon">1</div>
+          <h3>Parse the curve</h3>
+          <p>
+            Your expression is parsed by
+            <a href="https://www.sympy.org" target="_blank" rel="noopener">SymPy</a>
+            into a symbolic form and compiled to a fast numeric function.
+          </p>
+        </div>
+        <div class="info-card">
+          <div class="info-icon">2</div>
+          <h3>Iterate over (n, x)</h3>
+          <p>
+            For each rational value of <em>n</em> in your range, every integer
+            <em>x</em> is tested. The server computes <em>f(n, x)</em> and
+            checks whether it is a perfect square.
+          </p>
+        </div>
+        <div class="info-card">
+          <div class="info-icon">3</div>
+          <h3>Emit integer points</h3>
+          <p>
+            Whenever <em>f(n, x)</em> is a non-negative perfect square, the
+            triple <em>(n, x, ±y)</em> is streamed to your browser in real time.
+          </p>
+        </div>
+        <div class="info-card">
+          <div class="info-icon">4</div>
+          <h3>Export results</h3>
+          <p>
+            All discovered integer points can be downloaded as a CSV file for
+            further analysis or verification.
+          </p>
+        </div>
+      </div>
+
+      <div class="math-note">
+        <h3>Mathematical context</h3>
+        <p>
+          An <strong>elliptic curve</strong> over ℚ can be written in Weierstrass
+          form as <em>y² = x³ + ax + b</em>.  By introducing a rational parameter
+          <em>n</em>, families of curves such as <em>y² = x³ − n²x</em> arise
+          naturally (this is the
+          <a href="https://en.wikipedia.org/wiki/Congruent_number_problem"
+             target="_blank" rel="noopener">congruent number curve</a>).
+          This tool lets you specify any such family and exhaustively search for
+          integer points — useful for number-theory experiments and
+          Diophantine equation research.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── EXAMPLES ────────────────────────────────────────────────────────── -->
+  <section id="examples" class="examples-section">
+    <div class="info-inner">
+      <h2>Example Curves</h2>
+      <div class="example-grid" id="example-grid"></div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <p>
+      Elliptic Curve Integer Point Finder &nbsp;·&nbsp;
+      Source on <a href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website"
+                   target="_blank" rel="noopener">GitHub</a>
+    </p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
