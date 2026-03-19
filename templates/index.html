@@ -88,20 +88,48 @@
 
       <!-- x range -->
       <section class="param-section">
-        <div class="range-group">
-          <div class="range-field">
-            <label class="param-label" for="x-min">x&nbsp;min</label>
-            <input id="x-min" class="num-input" type="number" value="-100" />
-          </div>
-          <div class="range-field">
-            <label class="param-label" for="x-max">x&nbsp;max</label>
-            <input id="x-max" class="num-input" type="number" value="100" />
+        <!-- Auto-scale toggle -->
+        <div class="autoscale-row">
+          <label class="toggle-label" for="x-autoscale-chk">
+            <input type="checkbox" id="x-autoscale-chk" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-text">Auto-scale x&nbsp;by |n|</span>
+          </label>
+          <div id="x-scale-wrap" style="display:none">
+            <label class="param-label" for="x-scale-factor" style="margin-top:8px">
+              Scale factor&nbsp;<em>k</em>
+              <span class="tooltip-wrap">
+                <span class="tooltip-icon">?</span>
+                <span class="tooltip-text">
+                  For each n, x is searched in [−k·|n|, k·|n|].
+                  Use k&nbsp;≥&nbsp;15 for y²&nbsp;=&nbsp;x³&nbsp;−&nbsp;1729n³
+                  (solutions appear near x&nbsp;≈&nbsp;12n).
+                </span>
+              </span>
+            </label>
+            <input id="x-scale-factor" class="num-input" type="number"
+                   value="15" min="1" max="500" step="1" />
+            <p class="hint">x ∈ [−k|n|, k|n|] per n — ideal for homogeneous families like
+              y² = x³ − 1729n³.</p>
           </div>
         </div>
-        <p class="hint">
-          x is always searched over integers.  Evaluation budget: up to
-          <strong>20 million</strong> (n-count × x-range).
-        </p>
+        <!-- Fixed x range (hidden when auto-scale is on) -->
+        <div id="x-fixed-range">
+          <div class="range-group" style="margin-top:8px">
+            <div class="range-field">
+              <label class="param-label" for="x-min">x&nbsp;min</label>
+              <input id="x-min" class="num-input" type="number" value="-100" />
+            </div>
+            <div class="range-field">
+              <label class="param-label" for="x-max">x&nbsp;max</label>
+              <input id="x-max" class="num-input" type="number" value="100" />
+            </div>
+          </div>
+          <p class="hint">
+            x is always searched over integers.  Evaluation budget: up to
+            <strong>20 million</strong> (n-count × x-range).
+          </p>
+        </div>
       </section>
 
       <!-- Action -->

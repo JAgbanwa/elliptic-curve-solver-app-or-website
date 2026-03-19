@@ -93,6 +93,7 @@ def api_search():
         x_min   = int(request.args.get("x_min",  -100))
         x_max   = int(request.args.get("x_max",   100))
         n_denom = max(1, int(request.args.get("n_denom", 1)))
+        x_scale = max(0.0, float(request.args.get("x_scale", 0)))
     except (ValueError, TypeError) as exc:
         def _err():
             yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
@@ -135,9 +136,17 @@ def api_search():
             fracs.sort()
             n_pairs = [(float(f), str(f)) for f in fracs]
 
-        x_count     = x_max - x_min + 1
-        n_count     = len(n_pairs)
-        total_evals = n_count * x_count
+        n_count = len(n_pairs)
+        if x_scale > 0:
+            # Per-n x range: [−x_scale·|n|, x_scale·|n|], minimum ±10 for n=0
+            total_evals = sum(
+                2 * max(10, math.ceil(x_scale * abs(nf))) + 1
+                for (nf, _) in n_pairs
+            )
+            x_count = 0   # variable; 0 signals auto-scale to the frontend
+        else:
+            x_count     = x_max - x_min + 1
+            total_evals = n_count * x_count
 
         if total_evals > MAX_EVALS:
             yield sse({
@@ -150,18 +159,27 @@ def api_search():
             return
 
         yield sse({"type": "start", "n_count": n_count,
-                   "x_count": x_count, "total_evals": total_evals})
+                   "x_count": x_count, "total_evals": total_evals,
+                   "x_scale": x_scale})
 
         solutions_found = 0
         report_step = max(1, n_count // 200)  # emit progress ≈ 200 times
 
-        # Pre-allocate x arrays for vectorised scan (avoids rebuilding each iteration)
-        x_arr = np.arange(x_min, x_max + 1, dtype=np.float64)
-        x_int = np.arange(x_min, x_max + 1, dtype=np.int64)
         n_with_solutions: list[str] = []
+
+        # Pre-allocate fixed x arrays when not auto-scaling
+        if x_scale == 0:
+            x_arr = np.arange(x_min, x_max + 1, dtype=np.float64)
+            x_int = np.arange(x_min, x_max + 1, dtype=np.int64)
 
         for idx, (n_float, n_disp) in enumerate(n_pairs):
             batch: list[dict] = []
+
+            # Build per-n x range when auto-scaling
+            if x_scale > 0:
+                half = max(10, math.ceil(x_scale * abs(n_float)))
+                x_arr = np.arange(-half, half + 1, dtype=np.float64)
+                x_int = np.arange(-half, half + 1, dtype=np.int64)
 
             try:
                 rhs_raw = f_fast(n_float, x_arr)
@@ -216,4 +234,4 @@ def api_search():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, threaded=True)
+    app.run(debug=True, port=5001, threaded=True)

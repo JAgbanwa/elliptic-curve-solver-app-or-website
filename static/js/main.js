@@ -55,6 +55,13 @@ const EXAMPLES = [
     nm: -10, nx: 10, xm: -40, xx: 40, nd: 1,
     desc: "Node cubic family; integer points vary richly with n.",
   },
+  {
+    name: "Hardy–Ramanujan 1729 family",
+    expr: "x**3 - 1729*n**3",
+    nm: 1, nx: 50, nd: 1,
+    autoScale: true, xScale: 15,
+    desc: "1729 = 12³+1³ = 10³+9³. Auto-scales x ∈ [−15|n|, 15|n|]; finds integral points for any n.",
+  },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -80,6 +87,10 @@ const resultsBody  = document.getElementById("results-tbody");
 const solCount     = document.getElementById("solution-count");
 const emptyState   = document.getElementById("empty-state");
 const exampleGrid  = document.getElementById("example-grid");
+const xAutoScaleChk  = document.getElementById("x-autoscale-chk");
+const xScaleWrap     = document.getElementById("x-scale-wrap");
+const xFixedRange    = document.getElementById("x-fixed-range");
+const xScaleFactorIn = document.getElementById("x-scale-factor");
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STATE
@@ -216,10 +227,14 @@ function buildSearchURL() {
     expr:    exprInput.value.trim(),
     n_min:   nMinIn.value,
     n_max:   nMaxIn.value,
-    x_min:   xMinIn.value,
-    x_max:   xMaxIn.value,
     n_denom: nDenomIn.value,
   });
+  if (xAutoScaleChk.checked) {
+    p.set("x_scale", xScaleFactorIn.value);
+  } else {
+    p.set("x_min", xMinIn.value);
+    p.set("x_max", xMaxIn.value);
+  }
   return "/api/search?" + p.toString();
 }
 
@@ -242,12 +257,20 @@ function startSearch() {
     switch (msg.type) {
       case "start":
         nTotalCount = msg.n_count;
-        setStatus(
-          `Searching ${msg.n_count.toLocaleString()} n-values × `
-          + `${msg.x_count.toLocaleString()} x-values `
-          + `= ${msg.total_evals.toLocaleString()} evaluations…`,
-          "status-running",
-        );
+        if (msg.x_scale > 0) {
+          setStatus(
+            `Searching ${msg.n_count.toLocaleString()} n-values, auto-scaled x (k=${msg.x_scale})`
+            + ` — ${msg.total_evals.toLocaleString()} evaluations…`,
+            "status-running",
+          );
+        } else {
+          setStatus(
+            `Searching ${msg.n_count.toLocaleString()} n-values × `
+            + `${msg.x_count.toLocaleString()} x-values `
+            + `= ${msg.total_evals.toLocaleString()} evaluations…`,
+            "status-running",
+          );
+        }
         break;
 
       case "progress":
@@ -319,6 +342,12 @@ btnClear.addEventListener("click",  () => {
   setStatus('Enter a curve expression and click Run Search.', "status-idle");
 });
 
+xAutoScaleChk.addEventListener("change", () => {
+  const on = xAutoScaleChk.checked;
+  xScaleWrap.style.display  = on ? "block" : "none";
+  xFixedRange.style.display = on ? "none"  : "block";
+});
+
 /* ═══════════════════════════════════════════════════════════════════════════
    CSV EXPORT
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -360,9 +389,17 @@ EXAMPLES.forEach((ex) => {
     exprInput.value = ex.expr;
     nMinIn.value    = ex.nm;
     nMaxIn.value    = ex.nx;
-    xMinIn.value    = ex.xm;
-    xMaxIn.value    = ex.xx;
     nDenomIn.value  = ex.nd;
+    const useAutoScale = !!ex.autoScale;
+    xAutoScaleChk.checked     = useAutoScale;
+    xScaleWrap.style.display  = useAutoScale ? "block" : "none";
+    xFixedRange.style.display = useAutoScale ? "none"  : "block";
+    if (useAutoScale) {
+      xScaleFactorIn.value = ex.xScale || 15;
+    } else {
+      xMinIn.value = ex.xm;
+      xMaxIn.value = ex.xx;
+    }
     fetchLatex(ex.expr);
     // scroll to top
     document.querySelector(".main-grid").scrollIntoView({ behavior: "smooth" });
