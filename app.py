@@ -16,6 +16,8 @@ import re
 import math
 import json
 
+import numpy as np
+
 from flask import Flask, render_template, request, Response, stream_with_context
 from sympy import symbols, sympify, lambdify, latex as sym_latex
 from sympy.core.sympify import SympifyError
@@ -110,7 +112,7 @@ def api_search():
             return
 
         try:
-            f_fast = lambdify((n_sym, x_sym), expr, modules="math")
+            f_fast = lambdify((n_sym, x_sym), expr, modules=["numpy", "math"])
         except Exception as exc:  # noqa: BLE001
             yield sse({"type": "error", "message": f"Cannot compile expression: {exc}"})
             return
@@ -153,30 +155,46 @@ def api_search():
         solutions_found = 0
         report_step = max(1, n_count // 200)  # emit progress ≈ 200 times
 
+        # Pre-allocate x arrays for vectorised scan (avoids rebuilding each iteration)
+        x_arr = np.arange(x_min, x_max + 1, dtype=np.float64)
+        x_int = np.arange(x_min, x_max + 1, dtype=np.int64)
+        n_with_solutions: list[str] = []
+
         for idx, (n_float, n_disp) in enumerate(n_pairs):
             batch: list[dict] = []
 
-            for x_val in range(x_min, x_max + 1):
-                try:
-                    rhs = f_fast(n_float, x_val)
-                    if not math.isfinite(rhs) or rhs < -0.5:
-                        continue
-                    rhs_rounded = round(rhs)
-                    if abs(rhs - rhs_rounded) > 1e-6:
-                        continue        # not close enough to an integer
-                    rhs_int = int(rhs_rounded)
-                    if rhs_int < 0:
-                        continue
-                    y_pos = math.isqrt(rhs_int)
-                    if y_pos * y_pos == rhs_int:
+            try:
+                rhs_raw = f_fast(n_float, x_arr)
+                rhs_arr = np.asarray(rhs_raw, dtype=np.float64)
+                if rhs_arr.ndim == 0:          # expression independent of x
+                    rhs_arr = np.full(len(x_arr), float(rhs_arr))
+            except Exception:  # noqa: BLE001
+                pass
+            else:
+                rhs_round = np.rint(rhs_arr)
+                mask = (
+                    np.isfinite(rhs_arr)
+                    & (rhs_round >= 0)
+                    & (np.abs(rhs_arr - rhs_round) <= 1e-6)
+                )
+                if np.any(mask):
+                    cand_rhs = rhs_round[mask].astype(np.int64)
+                    cand_x   = x_int[mask]
+                    # Robust integer sqrt: round avoids floating-point under/over-estimate
+                    y_cand   = np.round(
+                        np.sqrt(cand_rhs.astype(np.float64))
+                    ).astype(np.int64)
+                    sq_mask  = y_cand * y_cand == cand_rhs
+                    for j in np.where(sq_mask)[0]:
+                        x_val = int(cand_x[j])
+                        y_pos = int(y_cand[j])
                         batch.append({"n": n_disp, "x": x_val, "y":  y_pos})
                         if y_pos > 0:
                             batch.append({"n": n_disp, "x": x_val, "y": -y_pos})
-                        solutions_found += 1
-                except (ZeroDivisionError, OverflowError, ValueError, TypeError):
-                    continue
+                    solutions_found += int(np.sum(sq_mask))
 
             if batch:
+                n_with_solutions.append(n_disp)
                 yield sse({"type": "solutions", "data": batch})
 
             if idx % report_step == 0 or idx == n_count - 1:
@@ -187,7 +205,8 @@ def api_search():
                     "solutions": solutions_found,
                 })
 
-        yield sse({"type": "done", "total_solutions": solutions_found})
+        yield sse({"type": "done", "total_solutions": solutions_found,
+                   "n_with_solutions": n_with_solutions})
 
     return Response(
         stream_with_context(generate()),

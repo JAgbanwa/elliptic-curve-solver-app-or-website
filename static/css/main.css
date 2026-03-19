@@ -332,6 +332,41 @@ tbody td:first-child { color: var(--text-dim); font-size: .78rem; }
 }
 .site-footer a { color: var(--accent2); }
 
+/* ── N Summary ───────────────────────────────────────────────────────────── */
+#n-summary-section {
+  margin: 14px 0;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green);
+  border-radius: var(--radius-sm);
+}
+.n-summary-title {
+  font-size: .82rem; font-weight: 600;
+  color: var(--text-dim); text-transform: uppercase;
+  letter-spacing: .5px; margin-bottom: 8px;
+}
+.n-summary-title em { color: var(--accent); font-style: normal; }
+.n-summary-header { font-size: .83rem; color: var(--text-dim); margin-bottom: 8px; }
+.n-summary-count { font-weight: 700; color: var(--green); font-size: .95rem; }
+.n-chips-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.n-chip {
+  background: rgba(63,185,80,.12);
+  border: 1px solid rgba(63,185,80,.5);
+  color: var(--green); border-radius: 20px;
+  padding: 2px 10px;
+  font-family: var(--font-mono); font-size: .82rem; font-weight: 600;
+}
+
+/* ── Table n-group row ──────────────────────────────────────────────────── */
+.n-group-row td {
+  background: var(--surface2);
+  color: var(--accent); font-weight: 700;
+  font-family: var(--font-mono); font-size: .78rem;
+  padding: 5px 14px; letter-spacing: .3px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .main-grid { grid-template-columns: 1fr; }

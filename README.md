@@ -10,8 +10,11 @@ to the browser.
 
 - **Arbitrary curve families** — enter any expression `f(n, x)` in Python syntax  
 - **Rational n support** — set a denominator to scan fractions like ½, ⅓, ⅙, …  
+- **N Summary panel** — after search, instantly see which rational n-values yielded integral points  
 - **Live streaming** — results appear in real time via Server-Sent Events (SSE)  
+- **NumPy-vectorised backend** — the entire x range is evaluated in a single NumPy call per n, making large searches orders of magnitude faster  
 - **LaTeX preview** — the curve is rendered with KaTeX as you type  
+- **Table grouped by n** — solutions are visually grouped under their n-header row  
 - **CSV export** — download all discovered integer points  
 - **8 built-in examples** — including the congruent number curve and Weierstrass families  
 
@@ -38,10 +41,11 @@ Then open **http://localhost:5000** in your browser.
 ## How It Works
 
 | Step | What happens |
-|------|--------------|
-| **Parse** | SymPy parses `f(n, x)` and compiles it to a fast numeric function via `lambdify` |
-| **Scan** | For each rational `n` in `[n_min, n_max]` (step `1/n_denom`), every integer `x` in `[x_min, x_max]` is tested |
-| **Check** | `f(n, x)` is computed; if it is a non-negative perfect square, `(n, x, ±y)` is a solution |
+|------|-------------|
+| **Parse** | SymPy parses `f(n, x)` and compiles it to a fast NumPy-vectorised function via `lambdify` |
+| **Scan** | For each rational `n` in `[n_min, n_max]` (step `1/n_denom`), all integers `x` in `[x_min, x_max]` are evaluated **in one NumPy call** |
+| **Check** | RHS values are filtered for non-negative integers; integer square-roots are computed in bulk |
+| **Summarise** | After the search, a dedicated panel lists every rational `n` that had at least one integral point |
 | **Stream** | Solutions and progress are streamed back to the browser as JSON Server-Sent Events |
 
 **Budget:** up to 20 million evaluations per request (n-count × x-range).

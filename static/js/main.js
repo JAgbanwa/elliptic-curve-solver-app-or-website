@@ -87,6 +87,8 @@ const exampleGrid  = document.getElementById("example-grid");
 let evtSource   = null;   // active EventSource
 let allSolutions= [];     // [{n, x, y}, …]
 let rowIndex    = 0;      // global row counter for table
+let nTotalCount = 0;      // total n-values in last search (for n-summary)
+let lastGroupN  = null;   // n-value of the current table group header
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LATEX PREVIEW
@@ -133,6 +135,29 @@ exprInput.addEventListener("input", () => {
 fetchLatex(exprInput.value);
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   N SUMMARY
+   ═══════════════════════════════════════════════════════════════════════════ */
+function renderNSummary(nList, nTested) {
+  const section = document.getElementById("n-summary-section");
+  const wrap    = document.getElementById("n-summary-wrap");
+  if (!section || !wrap) return;
+  if (!nList || nList.length === 0) {
+    wrap.innerHTML = `<p class="dim">No rational <em>n</em> yielded integral points in the searched range.</p>`;
+  } else {
+    const chips = nList
+      .map(n => `<span class="n-chip">${escHtml(String(n))}</span>`)
+      .join("");
+    wrap.innerHTML = `
+      <div class="n-summary-header">
+        <span class="n-summary-count">${nList.length}</span>
+        of ${nTested.toLocaleString()} n-values tested yielded integral points:
+      </div>
+      <div class="n-chips-row">${chips}</div>`;
+  }
+  section.style.display = "block";
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    SEARCH
    ═══════════════════════════════════════════════════════════════════════════ */
 function setStatus(msg, cls) {
@@ -142,19 +167,33 @@ function setStatus(msg, cls) {
 
 function clearResults() {
   allSolutions = [];
-  rowIndex = 0;
+  rowIndex     = 0;
+  lastGroupN   = null;
+  nTotalCount  = 0;
   resultsBody.innerHTML = "";
   solCount.textContent = "0 solutions";
   tableWrap.style.display = "none";
   emptyState.style.display = "none";
   progressArea.style.display = "none";
   progressFill.style.width = "0%";
+  const ns = document.getElementById("n-summary-section");
+  if (ns) ns.style.display = "none";
 }
 
 function addRows(batch) {
   batch.forEach(({ n, x, y }) => {
     allSolutions.push({ n, x, y });
     rowIndex++;
+
+    // Insert a visual group-header row whenever n changes
+    if (String(n) !== lastGroupN) {
+      lastGroupN = String(n);
+      const gtr = document.createElement("tr");
+      gtr.className = "n-group-row";
+      gtr.innerHTML = `<td colspan="5">n = ${escHtml(String(n))}</td>`;
+      resultsBody.appendChild(gtr);
+    }
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${rowIndex}</td>
@@ -202,6 +241,7 @@ function startSearch() {
 
     switch (msg.type) {
       case "start":
+        nTotalCount = msg.n_count;
         setStatus(
           `Searching ${msg.n_count.toLocaleString()} n-values × `
           + `${msg.x_count.toLocaleString()} x-values `
@@ -230,6 +270,7 @@ function startSearch() {
         btnSearch.disabled = false;
         btnStop.disabled   = true;
         progressFill.style.width = "100%";
+        renderNSummary(msg.n_with_solutions || [], nTotalCount);
         if (allSolutions.length === 0) {
           emptyState.style.display  = "block";
           tableWrap.style.display  = "none";
