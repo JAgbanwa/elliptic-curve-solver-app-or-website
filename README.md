@@ -84,10 +84,3 @@ Then open **http://localhost:5000** in your browser.
 - Search budget is capped server-side at 20 M evaluations per request  
 
 ---
-
-## Related
-
-This app grew out of the
-[crackinganotsodiffproblem](https://github.com/JAgbanwa/crackinganotsodiffproblem)
-project, which searches for integer solutions to **x³ + y³ + z³ = 114**
-via a specialised elliptic curve parametrisation.
