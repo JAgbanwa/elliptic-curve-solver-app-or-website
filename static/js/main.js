@@ -63,6 +63,12 @@ const EXAMPLES = [
     desc: "y\u00b2 = x\u00b3 + (\u221245349632n\u2074 + 419904n\u00b3)x + 3(39182082048n\u2076 \u2212 \u2026). Excludes trivial n=0, x=0 solutions.",
   },
   {
+    name: "Weierstrass (36n+27)\u00b2 family",
+    expr: "x**3 + (36*n + 27)**2 * x**2 + (15552*n**3 + 34992*n**2 + 26244*n + 6561)*x + (46656*n**4 + 139968*n**3 + 157464*n**2 + 78713*n + 14748)",
+    nm: -5, nx: 5, xm: -50000, xx: 50000, nd: 1,
+    desc: "y\u00b2 = x\u00b3 + (36n+27)\u00b2x\u00b2 + (15552n\u00b3+\u2026)x + (46656n\u2074+\u2026). Coefficients grow with n; wide x range needed.",
+  },
+  {
     name: "Hardy–Ramanujan 1729 family",
     expr: "x**3 - 1729*n**3",
     nm: 1, nx: 50, nd: 1,
