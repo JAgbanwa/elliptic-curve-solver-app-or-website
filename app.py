@@ -103,6 +103,22 @@ def _eval_center(center_str: str, n_val: int) -> int:
     return int(round(float(result)))
 
 
+def _integer_divisors(p: int, max_d: int) -> list[int]:
+    """Return all integer divisors of p with |d| ≤ max_d, sorted ascending.
+    Returns [] for p = 0 (every integer divides 0 — unhelpful for search)."""
+    if p == 0:
+        return []
+    p_abs = abs(p)
+    divs: set[int] = set()
+    for d in range(1, min(math.isqrt(p_abs), max_d) + 1):
+        if p_abs % d == 0:
+            divs.add(d)
+            q = p_abs // d
+            if q <= max_d:
+                divs.add(q)
+    return sorted([-d for d in divs] + [d for d in divs])
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -176,8 +192,7 @@ def api_search():
         {"type": "done",      "total_solutions": …}
         {"type": "error",     "message": …}
     """
-    expr_str      = request.args.get("expr", "x**3 - n**2*x")
-    y2_coeff_str  = request.args.get("y2_coeff", "1").strip() or "1"
+    expr_str = request.args.get("expr", "x**3 - n**2*x")
     try:
         n_min   = int(request.args.get("n_min",    -10))
         n_max   = int(request.args.get("n_max",     10))
@@ -187,6 +202,8 @@ def api_search():
         x_scale = max(0.0, float(request.args.get("x_scale", 0)))
         x_window = max(1, int(request.args.get("x_window", 100)))
         x_center_expr_str = request.args.get("x_center_expr", "").strip()
+        x_divisor_poly = request.args.get("x_divisor_poly", "").strip()
+        x_divisor_max  = max(1, int(request.args.get("x_divisor_max", 1_000_000)))
         skip_zero_n = request.args.get("skip_zero_n", "") == "1"
         skip_zero_x = request.args.get("skip_zero_x", "") == "1"
     except (ValueError, TypeError) as exc:
@@ -212,18 +229,6 @@ def api_search():
             f_fast = lambdify((n_sym, x_sym), expr, modules=["numpy", "math"])
         except Exception as exc:  # noqa: BLE001
             yield sse({"type": "error", "message": f"Cannot compile expression: {exc}"})
-            return
-
-        # ── parse + compile y² coefficient (default 1) ───────────────────────
-        try:
-            coeff_expr = parse_expr(y2_coeff_str)
-        except ValueError as exc:
-            yield sse({"type": "error", "message": f"y\u00b2 coefficient: {exc}"})
-            return
-        try:
-            coeff_fast = lambdify((n_sym, x_sym), coeff_expr, modules=["numpy", "math"])
-        except Exception as exc:  # noqa: BLE001
-            yield sse({"type": "error", "message": f"Cannot compile y\u00b2 coefficient: {exc}"})
             return
 
         # ── build list of n values (integer or rational) ──────────────────────
@@ -260,8 +265,7 @@ def api_search():
         # ── Window mode: exact big-integer arithmetic ────────────────────────
         if x_center_expr_str:
             try:
-                f_py     = lambdify((n_sym, x_sym), expr,       modules=[])
-                coeff_py = lambdify((n_sym, x_sym), coeff_expr, modules=[])
+                f_py = lambdify((n_sym, x_sym), expr, modules=[])
             except Exception as exc:  # noqa: BLE001
                 yield sse({"type": "error", "message": f"Cannot compile: {exc}"})
                 return
@@ -293,28 +297,19 @@ def api_search():
                     if skip_zero_x and x_val == 0:
                         continue
                     try:
-                        # Evaluate coefficient c(n, x)
-                        c_raw = coeff_py(n_raw_val, x_val)
-                        c_int = int(round(float(c_raw))) if isinstance(c_raw, float) else int(c_raw)
-                        if c_int == 0:
-                            continue
                         rhs = f_py(n_raw_val, x_val)
                         if isinstance(rhs, float):
-                            if not math.isfinite(rhs):
+                            if not math.isfinite(rhs) or rhs < 0:
                                 continue
                             rhs_int = round(rhs)
                             if abs(rhs - rhs_int) > 1e-6:
                                 continue
                         else:
                             rhs_int = int(rhs)
-                        # Exact integer divisibility: c_int * y² = rhs_int
-                        if rhs_int % c_int != 0:
-                            continue
-                        quot = rhs_int // c_int
-                        if quot < 0:
-                            continue
-                        y_pos = math.isqrt(quot)
-                        if y_pos * y_pos == quot:
+                            if rhs_int < 0:
+                                continue
+                        y_pos = math.isqrt(rhs_int)
+                        if y_pos * y_pos == rhs_int:
                             batch_w.append({"n": n_disp, "x": str(x_val), "y": str(y_pos)})
                             if y_pos > 0:
                                 batch_w.append({"n": n_disp, "x": str(x_val), "y": str(-y_pos)})
@@ -335,6 +330,85 @@ def api_search():
                        "n_with_solutions": n_with_solutions_w})
             return
         # ── End window mode ──────────────────────────────────────────────────
+
+        # ── Divisor search mode ───────────────────────────────────────────────
+        if x_divisor_poly:
+            try:
+                div_expr = parse_expr(x_divisor_poly)
+            except ValueError as exc:
+                yield sse({"type": "error", "message": f"Divisor polynomial: {exc}"})
+                return
+            if div_expr.free_symbols - {n_sym}:
+                yield sse({"type": "error",
+                           "message": "Divisor polynomial must contain only n (not x)."})
+                return
+            try:
+                f_py   = lambdify((n_sym, x_sym), expr,     modules=[])
+                div_py = lambdify((n_sym,),        div_expr, modules=[])
+            except Exception as exc:  # noqa: BLE001
+                yield sse({"type": "error", "message": f"Cannot compile: {exc}"})
+                return
+
+            yield sse({"type": "start", "n_count": n_count,
+                       "x_count": 0, "total_evals": 0, "x_scale": 0})
+
+            sol_d = 0
+            n_with_sol_d: list[str] = []
+            report_step_d = max(1, n_count // 200)
+
+            for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+                if skip_zero_n and n_raw_val == 0:
+                    continue
+                batch_d: list[dict] = []
+                try:
+                    p_val = div_py(n_raw_val)
+                    if isinstance(p_val, float):
+                        p_int = round(p_val)
+                        if abs(p_val - p_int) > 1e-6:
+                            continue
+                        p_val = p_int
+                    else:
+                        p_val = int(p_val)
+                except Exception:  # noqa: BLE001
+                    continue
+
+                for x_val in _integer_divisors(p_val, x_divisor_max):
+                    if skip_zero_x and x_val == 0:
+                        continue
+                    try:
+                        rhs = f_py(n_raw_val, x_val)
+                        if isinstance(rhs, float):
+                            if not math.isfinite(rhs) or rhs < 0:
+                                continue
+                            rhs_int = round(rhs)
+                            if abs(rhs - rhs_int) > 1e-6:
+                                continue
+                        else:
+                            rhs_int = int(rhs)
+                            if rhs_int < 0:
+                                continue
+                        y_pos = math.isqrt(rhs_int)
+                        if y_pos * y_pos == rhs_int:
+                            batch_d.append({"n": n_disp, "x": str(x_val), "y": str(y_pos)})
+                            if y_pos > 0:
+                                batch_d.append({"n": n_disp, "x": str(x_val), "y": str(-y_pos)})
+                            sol_d += 1
+                    except Exception:  # noqa: BLE001
+                        continue
+
+                if batch_d:
+                    n_with_sol_d.append(n_disp)
+                    yield sse({"type": "solutions", "data": batch_d})
+
+                if idx % report_step_d == 0 or idx == n_count - 1:
+                    yield sse({"type": "progress",
+                               "pct": round(100 * (idx + 1) / n_count, 1),
+                               "n": n_disp, "solutions": sol_d})
+
+            yield sse({"type": "done", "total_solutions": sol_d,
+                       "n_with_solutions": n_with_sol_d})
+            return
+        # ── End divisor search mode ───────────────────────────────────────────
 
         if total_evals > WARN_EVALS:
             yield sse({
@@ -387,23 +461,14 @@ def api_search():
                 rhs_arr = np.asarray(rhs_raw, dtype=np.float64)
                 if rhs_arr.ndim == 0:          # expression independent of x
                     rhs_arr = np.full(len(x_arr), float(rhs_arr))
-                c_raw = coeff_fast(n_float, x_arr)
-                c_arr = np.asarray(c_raw, dtype=np.float64)
-                if c_arr.ndim == 0:
-                    c_arr = np.full(len(x_arr), float(c_arr))
             except Exception:  # noqa: BLE001
                 pass
             else:
-                # Divide rhs by coefficient; for c=1 (default) this is a no-op
-                c_nonzero = np.abs(c_arr) > 0.5
-                safe_c    = np.where(c_nonzero, c_arr, 1.0)
-                quot_arr  = rhs_arr / safe_c
-                rhs_round = np.rint(quot_arr)
+                rhs_round = np.rint(rhs_arr)
                 mask = (
-                    c_nonzero
-                    & np.isfinite(quot_arr)
+                    np.isfinite(rhs_arr)
                     & (rhs_round >= 0)
-                    & (np.abs(quot_arr - rhs_round) <= 1e-6)
+                    & (np.abs(rhs_arr - rhs_round) <= 1e-6)
                 )
                 if np.any(mask):
                     cand_rhs = rhs_round[mask].astype(np.int64)

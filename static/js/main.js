@@ -76,12 +76,14 @@ const EXAMPLES = [
     desc: "1729 = 12³+1³ = 10³+9³. Smart Window mode centres on ∛(1729n³) — correct for any n, including 20+ digit values.",
   },
   {
-    name: "Generalised coeff \u2014 x\u00b7y\u00b2 = x(6n+3+x)\u00b2 + (36n\u00b3+54n\u00b2+27n\u22124)",
-    expr: "x*(6*n + 3 + x)**2 + (36*n**3 + 54*n**2 + 27*n - 4)",
-    y2coeff: "x",
-    nm: -50, nx: 50, xm: -3000, xx: 3000, nd: 1,
+    name: "y\u00b2 = (6n+3+x)\u00b2 + P(n)/x",
+    expr: "(6*n + 3 + x)**2 + (36*n**3 + 54*n**2 + 27*n - 4)/x",
+    nm: 1, nx: 100, nd: 1,
+    xMode: "divisor",
+    xDivisorPoly: "36*n**3 + 54*n**2 + 27*n - 4",
+    xDivisorMax: 10000000,
     skipZeroX: true,
-    desc: "Demonstrates the generalised c(n,x)\u00b7y\u00b2 = f(n,x) solver. For each (n,x) checks whether x \u2223 f and f/x is a perfect square. Adjust n/x range to explore further.",
+    desc: "y\u00b2 = (6n+3+x)\u00b2 + (36n\u00b3+54n\u00b2+27n\u22124)/x. Divisor search: tests only x values that exactly divide the numerator P(n). Known solution: n=77, x=97, y=\u00b1699.",
   },
 ];
 
@@ -118,9 +120,11 @@ const xWindowWrap    = document.getElementById("x-window-wrap");
 const xScaleFactorIn = document.getElementById("x-scale-factor");
 const xCenterExprIn  = document.getElementById("x-center-expr");
 const xHalfWidthIn   = document.getElementById("x-half-width");
+const xDivisorWrap   = document.getElementById("x-divisor-wrap");
+const xDivisorPolyIn = document.getElementById("x-divisor-poly");
+const xDivisorMaxIn  = document.getElementById("x-divisor-max");
 const skipZeroNChk   = document.getElementById("skip-zero-n");
 const skipZeroXChk   = document.getElementById("skip-zero-x");
-const y2CoeffInput   = document.getElementById("y2-coeff-input");
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STATE
@@ -298,14 +302,15 @@ function buildSearchURL() {
   } else if (mode === "window") {
     p.set("x_center_expr", xCenterExprIn.value.trim());
     p.set("x_window", xHalfWidthIn.value);
+  } else if (mode === "divisor") {
+    p.set("x_divisor_poly", xDivisorPolyIn.value.trim());
+    p.set("x_divisor_max",  parseInt(xDivisorMaxIn.value, 10) || 1000000);
   } else {
     p.set("x_min", xMinIn.value);
     p.set("x_max", xMaxIn.value);
   }
   if (skipZeroNChk.checked) p.set("skip_zero_n", "1");
   if (skipZeroXChk.checked) p.set("skip_zero_x", "1");
-  const coeff = y2CoeffInput ? y2CoeffInput.value.trim() : "";
-  if (coeff && coeff !== "1") p.set("y2_coeff", coeff);
   return "/api/search?" + p.toString();
 }
 
@@ -427,9 +432,10 @@ btnClear.addEventListener("click",  () => {
 
 xModeSelect.addEventListener("change", () => {
   const m = xModeSelect.value;
-  xFixedRange.style.display = m === "fixed"     ? "block" : "none";
-  xScaleWrap.style.display  = m === "autoscale" ? "block" : "none";
-  xWindowWrap.style.display = m === "window"    ? "block" : "none";
+  xFixedRange.style.display  = m === "fixed"     ? "block" : "none";
+  xScaleWrap.style.display   = m === "autoscale" ? "block" : "none";
+  xWindowWrap.style.display  = m === "window"    ? "block" : "none";
+  xDivisorWrap.style.display = m === "divisor"   ? "block" : "none";
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -463,10 +469,10 @@ EXAMPLES.forEach((ex) => {
   // render KaTeX inside the card (after the DOM is ready)
   card.innerHTML = `
     <div class="example-name">${escHtml(ex.name)}</div>
-    <div class="example-expr"><code>${ex.y2coeff && ex.y2coeff !== "1" ? escHtml(ex.y2coeff) + "\u00b7y\u00b2 = " : "y\u00b2 = "}${escHtml(ex.expr)}</code></div>
+    <div class="example-expr"><code>y² = ${escHtml(ex.expr)}</code></div>
     <div class="example-math" id="ex-math-${EXAMPLES.indexOf(ex)}"></div>
     <div class="example-desc">${escHtml(ex.desc)}</div>
-    <div class="example-load">\u2197 Load this example</div>`;
+    <div class="example-load">↗ Load this example</div>`;
   exampleGrid.appendChild(card);
 
   function loadExample() {
@@ -476,25 +482,24 @@ EXAMPLES.forEach((ex) => {
     nDenomIn.value  = ex.nd;
     const mode = ex.xMode || (ex.autoScale ? "autoscale" : "fixed");
     xModeSelect.value = mode;
-    xFixedRange.style.display = mode === "fixed"     ? "block" : "none";
-    xScaleWrap.style.display  = mode === "autoscale" ? "block" : "none";
-    xWindowWrap.style.display = mode === "window"    ? "block" : "none";
+    xFixedRange.style.display  = mode === "fixed"     ? "block" : "none";
+    xScaleWrap.style.display   = mode === "autoscale" ? "block" : "none";
+    xWindowWrap.style.display  = mode === "window"    ? "block" : "none";
+    xDivisorWrap.style.display = mode === "divisor"   ? "block" : "none";
     if (mode === "autoscale") {
       xScaleFactorIn.value = ex.xScale || 15;
     } else if (mode === "window") {
       xCenterExprIn.value = ex.xCenterExpr || "12*n";
       xHalfWidthIn.value  = ex.xHalfWidth  || 5000;
+    } else if (mode === "divisor") {
+      xDivisorPolyIn.value = ex.xDivisorPoly || "";
+      xDivisorMaxIn.value  = ex.xDivisorMax  || 1000000;
     } else {
       xMinIn.value = ex.xm ?? -100;
       xMaxIn.value = ex.xx ?? 100;
     }
     skipZeroNChk.checked = !!ex.skipZeroN;
     skipZeroXChk.checked = !!ex.skipZeroX;
-    if (y2CoeffInput) {
-      y2CoeffInput.value = ex.y2coeff || "";
-      const y2Section = document.getElementById("y2-coeff-section");
-      if (y2Section) y2Section.open = !!ex.y2coeff;
-    }
     fetchLatex(ex.expr);
     document.querySelector(".main-grid").scrollIntoView({ behavior: "smooth" });
   }
@@ -509,14 +514,11 @@ window.addEventListener("load", () => {
     const el = document.getElementById("ex-math-" + i);
     if (!el) return;
     try {
-      const lhsPart = ex.y2coeff && ex.y2coeff !== "1"
-        ? ex.y2coeff.replace(/\*\*/g, "^").replace(/\*/g, "\\cdot ") + " \\cdot y^2 = "
-        : "y^2 = ";
-      katex.render(lhsPart + ex.expr.replace(/\*\*/g, "^").replace(/\*/g, "\\cdot "), el, {
+      katex.render("y^2 = " + ex.expr.replace(/\*\*/g, "^").replace(/\*/g, "\\cdot "), el, {
         throwOnError: false, displayMode: false,
       });
     } catch (_) {
-      el.textContent = "y\u00b2 = " + ex.expr;
+      el.textContent = "y² = " + ex.expr;
     }
   });
 });
