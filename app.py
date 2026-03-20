@@ -145,14 +145,20 @@ def api_from_latex():
         return {"ok": False, "error": f"Cannot parse LaTeX: {exc}"}
 
     # Validate: only n and x symbols allowed
-    from sympy import symbols as _syms  # noqa: PLC0415
+    from sympy import symbols as _syms, expand as _expand, collect as _collect  # noqa: PLC0415
     allowed = {n_sym, x_sym}
     unknown = sym_expr.free_symbols - allowed
     if unknown:
         return {"ok": False, "error": f"Unknown symbol(s) in LaTeX: {', '.join(str(s) for s in unknown)}. Only n and x are allowed."}
 
-    # Convert to Python string and validate through our security parser
-    python_expr = str(sym_expr)
+    # Produce a clean, human-readable Python expression: expand then collect by x
+    # so coefficients are grouped by x power (x**3 + A*x**2 + B*x + C form)
+    try:
+        clean_expr = _collect(_expand(sym_expr), x_sym)
+        python_expr = str(clean_expr)
+    except Exception:  # noqa: BLE001
+        python_expr = str(sym_expr)  # fall back to raw form
+
     try:
         validated = parse_expr(python_expr)
         return {"ok": True, "expr": python_expr, "latex": sym_latex(validated)}
