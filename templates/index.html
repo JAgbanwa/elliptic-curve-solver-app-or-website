@@ -122,6 +122,24 @@
             </div>
           </div>
         </details>
+        <!-- Generalized y² coefficient panel -->
+        <details class="latex-import" id="y2-coeff-section">
+          <summary class="latex-import-toggle">&#x2A; Generalize: non-unit y² coefficient c(n,x)</summary>
+          <div class="latex-import-body">
+            <label class="param-label" for="y2-coeff-input">
+              Coefficient of y² &nbsp;—&nbsp; solves <strong>c(n,x) · y² = f(n,x)</strong>
+            </label>
+            <input id="y2-coeff-input" class="text-input" type="text"
+                   placeholder="e.g.  x   (leave blank or 1 for standard y² = f(n,x))"
+                   autocomplete="off" spellcheck="false" />
+            <p class="hint">
+              For each (n, x), the solver checks whether <strong>f(n,x)</strong> is
+              divisible by <strong>c(n,x)</strong> and the quotient is a perfect square.
+              Example: <code>c = x</code> to solve
+              <code>x·y² = x·(6n+3+x)² + 36n³+54n²+27n−4</code>.
+            </p>
+          </div>
+        </details>
         <p class="hint">
           Use Python syntax: <code>**</code> for powers, <code>*</code> for
           multiplication.  Variables: <code>n</code> and <code>x</code>.

@@ -176,7 +176,8 @@ def api_search():
         {"type": "done",      "total_solutions": …}
         {"type": "error",     "message": …}
     """
-    expr_str = request.args.get("expr", "x**3 - n**2*x")
+    expr_str      = request.args.get("expr", "x**3 - n**2*x")
+    y2_coeff_str  = request.args.get("y2_coeff", "1").strip() or "1"
     try:
         n_min   = int(request.args.get("n_min",    -10))
         n_max   = int(request.args.get("n_max",     10))
@@ -213,6 +214,18 @@ def api_search():
             yield sse({"type": "error", "message": f"Cannot compile expression: {exc}"})
             return
 
+        # ── parse + compile y² coefficient (default 1) ───────────────────────
+        try:
+            coeff_expr = parse_expr(y2_coeff_str)
+        except ValueError as exc:
+            yield sse({"type": "error", "message": f"y\u00b2 coefficient: {exc}"})
+            return
+        try:
+            coeff_fast = lambdify((n_sym, x_sym), coeff_expr, modules=["numpy", "math"])
+        except Exception as exc:  # noqa: BLE001
+            yield sse({"type": "error", "message": f"Cannot compile y\u00b2 coefficient: {exc}"})
+            return
+
         # ── build list of n values (integer or rational) ──────────────────────
         from fractions import Fraction  # noqa: PLC0415
 
@@ -247,7 +260,8 @@ def api_search():
         # ── Window mode: exact big-integer arithmetic ────────────────────────
         if x_center_expr_str:
             try:
-                f_py = lambdify((n_sym, x_sym), expr, modules=[])
+                f_py     = lambdify((n_sym, x_sym), expr,       modules=[])
+                coeff_py = lambdify((n_sym, x_sym), coeff_expr, modules=[])
             except Exception as exc:  # noqa: BLE001
                 yield sse({"type": "error", "message": f"Cannot compile: {exc}"})
                 return
@@ -279,19 +293,28 @@ def api_search():
                     if skip_zero_x and x_val == 0:
                         continue
                     try:
+                        # Evaluate coefficient c(n, x)
+                        c_raw = coeff_py(n_raw_val, x_val)
+                        c_int = int(round(float(c_raw))) if isinstance(c_raw, float) else int(c_raw)
+                        if c_int == 0:
+                            continue
                         rhs = f_py(n_raw_val, x_val)
                         if isinstance(rhs, float):
-                            if not math.isfinite(rhs) or rhs < 0:
+                            if not math.isfinite(rhs):
                                 continue
                             rhs_int = round(rhs)
                             if abs(rhs - rhs_int) > 1e-6:
                                 continue
                         else:
                             rhs_int = int(rhs)
-                            if rhs_int < 0:
-                                continue
-                        y_pos = math.isqrt(rhs_int)
-                        if y_pos * y_pos == rhs_int:
+                        # Exact integer divisibility: c_int * y² = rhs_int
+                        if rhs_int % c_int != 0:
+                            continue
+                        quot = rhs_int // c_int
+                        if quot < 0:
+                            continue
+                        y_pos = math.isqrt(quot)
+                        if y_pos * y_pos == quot:
                             batch_w.append({"n": n_disp, "x": str(x_val), "y": str(y_pos)})
                             if y_pos > 0:
                                 batch_w.append({"n": n_disp, "x": str(x_val), "y": str(-y_pos)})
@@ -364,14 +387,23 @@ def api_search():
                 rhs_arr = np.asarray(rhs_raw, dtype=np.float64)
                 if rhs_arr.ndim == 0:          # expression independent of x
                     rhs_arr = np.full(len(x_arr), float(rhs_arr))
+                c_raw = coeff_fast(n_float, x_arr)
+                c_arr = np.asarray(c_raw, dtype=np.float64)
+                if c_arr.ndim == 0:
+                    c_arr = np.full(len(x_arr), float(c_arr))
             except Exception:  # noqa: BLE001
                 pass
             else:
-                rhs_round = np.rint(rhs_arr)
+                # Divide rhs by coefficient; for c=1 (default) this is a no-op
+                c_nonzero = np.abs(c_arr) > 0.5
+                safe_c    = np.where(c_nonzero, c_arr, 1.0)
+                quot_arr  = rhs_arr / safe_c
+                rhs_round = np.rint(quot_arr)
                 mask = (
-                    np.isfinite(rhs_arr)
+                    c_nonzero
+                    & np.isfinite(quot_arr)
                     & (rhs_round >= 0)
-                    & (np.abs(rhs_arr - rhs_round) <= 1e-6)
+                    & (np.abs(quot_arr - rhs_round) <= 1e-6)
                 )
                 if np.any(mask):
                     cand_rhs = rhs_round[mask].astype(np.int64)
