@@ -85,7 +85,28 @@ const EXAMPLES = [
     skipZeroX: true,
     desc: "y\u00b2 = (6n+3+x)\u00b2 + (36n\u00b3+54n\u00b2+27n\u22124)/x. Divisor search: tests only x values that exactly divide the numerator P(n). Known solution: n=77, x=97, y=\u00b1699.",
   },
+  {
+    name: "Large-solution demo: y\u00b2=x\u00b3+(x\u2212n)\u00b2",
+    expr: "x**3 + (x - n)**2",
+    nm: "10000000000", nx: "10000000000", nd: 1,
+    xMode: "exprrange",
+    xStartExpr: "n - 5",
+    xEndExpr:   "n + 5",
+    xStepExpr:  "1",
+    desc: "y\u00b2 = x\u00b3 + (x\u2212n)\u00b2. At x=n with n=k\u00b2: y=\u00b1k\u00b3. With n=10\u00b9\u2070=(10\u2075)\u00b2, finds x=10\u00b9\u2070, y=\u00b110\u00b9\u2075 in seconds via Expression Range. Change n to any perfect square.",
+  },
+  {
+    name: "Stepped coarse scan: y\u00b2=x\u00b3+17",
+    expr: "x**3 + 17",
+    nm: 0, nx: 0, nd: 1,
+    xMode: "exprrange",
+    xStartExpr: "0",
+    xEndExpr:   "100",
+    xStepExpr:  "1",
+    desc: "y\u00b2=x\u00b3+17 (n unused). Expression range finds all integral x up to 100: x=2 (y=5), x=4 (y=9), x=8 (y=23), x=43 (y=282), x=52 (y=375). Set start=\"10**10\", end=\"10**10+10**6\" to probe a trillion-scale region.",
+  },
 ];
+
 
 /* ═══════════════════════════════════════════════════════════════════════════
    DOM REFERENCES
@@ -123,6 +144,10 @@ const xHalfWidthIn   = document.getElementById("x-half-width");
 const xDivisorWrap   = document.getElementById("x-divisor-wrap");
 const xDivisorPolyIn = document.getElementById("x-divisor-poly");
 const xDivisorMaxIn  = document.getElementById("x-divisor-max");
+const xExprRangeWrap = document.getElementById("x-exprrange-wrap");
+const xStartExprIn   = document.getElementById("x-start-expr");
+const xEndExprIn     = document.getElementById("x-end-expr");
+const xStepExprIn    = document.getElementById("x-step-expr");
 const skipZeroNChk   = document.getElementById("skip-zero-n");
 const skipZeroXChk   = document.getElementById("skip-zero-x");
 
@@ -305,6 +330,10 @@ function buildSearchURL() {
   } else if (mode === "divisor") {
     p.set("x_divisor_poly", xDivisorPolyIn.value.trim());
     p.set("x_divisor_max",  parseInt(xDivisorMaxIn.value, 10) || 1000000);
+  } else if (mode === "exprrange") {
+    p.set("x_start_expr", xStartExprIn.value.trim());
+    p.set("x_end_expr",   xEndExprIn.value.trim());
+    p.set("x_step_expr",  xStepExprIn.value.trim() || "1");
   } else {
     p.set("x_min", xMinIn.value);
     p.set("x_max", xMaxIn.value);
@@ -432,10 +461,11 @@ btnClear.addEventListener("click",  () => {
 
 xModeSelect.addEventListener("change", () => {
   const m = xModeSelect.value;
-  xFixedRange.style.display  = m === "fixed"     ? "block" : "none";
-  xScaleWrap.style.display   = m === "autoscale" ? "block" : "none";
-  xWindowWrap.style.display  = m === "window"    ? "block" : "none";
-  xDivisorWrap.style.display = m === "divisor"   ? "block" : "none";
+  xFixedRange.style.display   = m === "fixed"     ? "block" : "none";
+  xScaleWrap.style.display    = m === "autoscale" ? "block" : "none";
+  xWindowWrap.style.display   = m === "window"    ? "block" : "none";
+  xDivisorWrap.style.display  = m === "divisor"   ? "block" : "none";
+  xExprRangeWrap.style.display= m === "exprrange" ? "block" : "none";
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -482,10 +512,11 @@ EXAMPLES.forEach((ex) => {
     nDenomIn.value  = ex.nd;
     const mode = ex.xMode || (ex.autoScale ? "autoscale" : "fixed");
     xModeSelect.value = mode;
-    xFixedRange.style.display  = mode === "fixed"     ? "block" : "none";
-    xScaleWrap.style.display   = mode === "autoscale" ? "block" : "none";
-    xWindowWrap.style.display  = mode === "window"    ? "block" : "none";
-    xDivisorWrap.style.display = mode === "divisor"   ? "block" : "none";
+    xFixedRange.style.display   = mode === "fixed"     ? "block" : "none";
+    xScaleWrap.style.display    = mode === "autoscale" ? "block" : "none";
+    xWindowWrap.style.display   = mode === "window"    ? "block" : "none";
+    xDivisorWrap.style.display  = mode === "divisor"   ? "block" : "none";
+    xExprRangeWrap.style.display= mode === "exprrange" ? "block" : "none";
     if (mode === "autoscale") {
       xScaleFactorIn.value = ex.xScale || 15;
     } else if (mode === "window") {
@@ -494,6 +525,10 @@ EXAMPLES.forEach((ex) => {
     } else if (mode === "divisor") {
       xDivisorPolyIn.value = ex.xDivisorPoly || "";
       xDivisorMaxIn.value  = ex.xDivisorMax  || 1000000;
+    } else if (mode === "exprrange") {
+      xStartExprIn.value = ex.xStartExpr || "-100";
+      xEndExprIn.value   = ex.xEndExpr   || "100";
+      xStepExprIn.value  = ex.xStepExpr  || "1";
     } else {
       xMinIn.value = ex.xm ?? -100;
       xMaxIn.value = ex.xx ?? 100;

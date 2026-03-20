@@ -204,6 +204,9 @@ def api_search():
         x_center_expr_str = request.args.get("x_center_expr", "").strip()
         x_divisor_poly = request.args.get("x_divisor_poly", "").strip()
         x_divisor_max  = max(1, int(request.args.get("x_divisor_max", 1_000_000)))
+        x_start_expr   = request.args.get("x_start_expr",  "").strip()
+        x_end_expr     = request.args.get("x_end_expr",    "").strip()
+        x_step_expr    = request.args.get("x_step_expr",   "1").strip() or "1"
         skip_zero_n = request.args.get("skip_zero_n", "") == "1"
         skip_zero_x = request.args.get("skip_zero_x", "") == "1"
     except (ValueError, TypeError) as exc:
@@ -330,6 +333,92 @@ def api_search():
                        "n_with_solutions": n_with_solutions_w})
             return
         # ── End window mode ──────────────────────────────────────────────────
+
+        # ── Expression range mode ──────────────────────────────────────────
+        # Scan x in [eval(x_start_expr,n), eval(x_end_expr,n)] with step
+        # eval(x_step_expr,n).  All arithmetic is exact big-integer Python.
+        if x_start_expr and x_end_expr:
+            try:
+                f_py_er = lambdify((n_sym, x_sym), expr, modules=[])
+            except Exception as exc:  # noqa: BLE001
+                yield sse({"type": "error", "message": f"Cannot compile: {exc}"})
+                return
+
+            # Estimate iteration count from first n value (for progress message)
+            try:
+                _sn = n_raw[0][0]
+                _xs = _eval_center(x_start_expr, _sn)
+                _xe = _eval_center(x_end_expr,   _sn)
+                _st = max(1, _eval_center(x_step_expr, _sn))
+                x_count_er = max(0, int((_xe - _xs) // _st) + 1)
+            except Exception:  # noqa: BLE001
+                x_count_er = 0
+            total_evals_er = n_count * x_count_er
+            if total_evals_er > WARN_EVALS:
+                yield sse({"type": "warning",
+                           "message": f"Estimated ~{total_evals_er:,} evaluations "
+                                      "(based on first n). Results stream as found "
+                                      "— click Stop any time."})
+            yield sse({"type": "start", "n_count": n_count,
+                       "x_count": x_count_er, "total_evals": total_evals_er, "x_scale": 0})
+
+            sol_er = 0
+            n_with_sol_er: list[str] = []
+            report_step_er = max(1, n_count // 200)
+
+            for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+                if skip_zero_n and n_raw_val == 0:
+                    continue
+                batch_er: list[dict] = []
+                try:
+                    x_start_v = _eval_center(x_start_expr, n_raw_val)
+                    x_end_v   = _eval_center(x_end_expr,   n_raw_val)
+                    x_step_v  = max(1, _eval_center(x_step_expr, n_raw_val))
+                except ValueError as exc:
+                    yield sse({"type": "error", "message": str(exc)})
+                    return
+
+                x_val = x_start_v
+                while x_val <= x_end_v:
+                    if not (skip_zero_x and x_val == 0):
+                        try:
+                            rhs = f_py_er(n_raw_val, x_val)
+                            rhs_ok = False
+                            if isinstance(rhs, float):
+                                if math.isfinite(rhs) and rhs >= 0:
+                                    rhs_int = round(rhs)
+                                    rhs_ok = abs(rhs - rhs_int) <= 1e-6
+                            else:
+                                rhs_int = int(rhs)       # exact for polynomials
+                                rhs_ok  = rhs_int >= 0
+                            if rhs_ok:
+                                y_pos = math.isqrt(rhs_int)
+                                if y_pos * y_pos == rhs_int:
+                                    batch_er.append({"n": n_disp,
+                                                     "x": str(x_val),
+                                                     "y": str(y_pos)})
+                                    if y_pos > 0:
+                                        batch_er.append({"n": n_disp,
+                                                         "x": str(x_val),
+                                                         "y": str(-y_pos)})
+                                    sol_er += 1
+                        except Exception:  # noqa: BLE001
+                            pass
+                    x_val += x_step_v
+
+                if batch_er:
+                    n_with_sol_er.append(n_disp)
+                    yield sse({"type": "solutions", "data": batch_er})
+
+                if idx % report_step_er == 0 or idx == n_count - 1:
+                    yield sse({"type": "progress",
+                               "pct": round(100 * (idx + 1) / n_count, 1),
+                               "n": n_disp, "solutions": sol_er})
+
+            yield sse({"type": "done", "total_solutions": sol_er,
+                       "n_with_solutions": n_with_sol_er})
+            return
+        # ── End expression range mode ──────────────────────────────────────────
 
         # ── Divisor search mode ───────────────────────────────────────────────
         if x_divisor_poly:

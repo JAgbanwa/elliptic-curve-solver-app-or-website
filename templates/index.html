@@ -166,6 +166,7 @@
           <option value="autoscale">Auto-scale x by |n|</option>
           <option value="window">Smart window (exact big-integer)</option>
           <option value="divisor">Divisor search (x&nbsp;|&nbsp;P(n))</option>
+          <option value="exprrange">Expression range + step (big-int)</option>
         </select>
 
         <!-- Fixed x range -->
@@ -265,6 +266,49 @@
           <p class="hint">
             Tests only x values that exactly divide P(n) &mdash; never scans
             non-divisors.  x&nbsp;=&nbsp;0 is always excluded automatically.
+          </p>
+        </div>
+
+        <!-- Expression range panel -->
+        <div id="x-exprrange-wrap" style="display:none; margin-top:8px">
+          <label class="param-label" for="x-start-expr">
+            x start (expression in n)
+            <span class="tooltip-wrap">
+              <span class="tooltip-icon">?</span>
+              <span class="tooltip-text">
+                Python big-integer expression in n. Supports icbrt(), abs(), n**k.
+                E.g. &ldquo;n**2&rdquo;, &ldquo;10**15&rdquo;, &ldquo;icbrt(n**3) - 100&rdquo;.
+              </span>
+            </span>
+          </label>
+          <input id="x-start-expr" class="text-input" type="text" value="-100"
+                 spellcheck="false" autocomplete="off"
+                 placeholder="e.g. n**2  or  10**15" />
+          <label class="param-label" style="margin-top:8px" for="x-end-expr">
+            x end (expression in n)
+          </label>
+          <input id="x-end-expr" class="text-input" type="text" value="100"
+                 spellcheck="false" autocomplete="off"
+                 placeholder="e.g. n**2 + 1000  or  10**15 + 10**6" />
+          <label class="param-label" style="margin-top:8px" for="x-step-expr">
+            Step (expression in n)
+            <span class="tooltip-wrap">
+              <span class="tooltip-icon">?</span>
+              <span class="tooltip-text">
+                Step size between consecutive x values. Use step&nbsp;&gt;&nbsp;1 to
+                sample a huge range sparsely, e.g. step&nbsp;=&nbsp;&ldquo;10**5&rdquo;
+                to probe every 100&thinsp;000th integer.
+              </span>
+            </span>
+          </label>
+          <input id="x-step-expr" class="text-input" type="text" value="1"
+                 spellcheck="false" autocomplete="off"
+                 placeholder="e.g. 1  or  n**2  or  10**5" />
+          <p class="hint">
+            All three fields use exact Python big-integer arithmetic &mdash;
+            safe for x&nbsp;up to 10<sup>50</sup> and beyond.
+            Supports <code>icbrt()</code>, <code>abs()</code>, <code>n**k</code>.
+            Count = (end&minus;start)&thinsp;&divide;&thinsp;step&thinsp;+&thinsp;1 per n.
           </p>
         </div>
       </section>
