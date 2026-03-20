@@ -3,7 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Elliptic Curve Integer Point Finder</title>
+  <title>Elliptic Curve Solver — Find Integer Points on y² = f(n, x)</title>
+  <meta name="description" content="Search for integer points on parametric elliptic curve families y² = f(n, x). Streams results live. Supports big integers, LaTeX input, CSV export." />
+  <meta name="keywords" content="elliptic curve, integer points, number theory, Diophantine equations, congruent number, SymPy, solver" />
+  <meta name="author" content="JAgbanwa" />
+  <!-- Open Graph / social sharing -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:title"       content="Elliptic Curve Solver" />
+  <meta property="og:description" content="Search for integer points on parametric elliptic curve families y² = f(n, x). Streams results live." />
+  <meta property="og:url"         content="https://elliptic-curve-solver.onrender.com" />
+  <!-- Twitter card -->
+  <meta name="twitter:card"        content="summary" />
+  <meta name="twitter:title"       content="Elliptic Curve Solver" />
+  <meta name="twitter:description" content="Live integer-point search on elliptic curve families y² = f(n, x)." />
+  <!-- Inline SVG favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='52' font-size='52'>∮</text></svg>" />
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
   <!-- KaTeX for math rendering -->
   <link rel="stylesheet"
@@ -34,7 +52,45 @@
     </div>
   </header>
 
-  <main class="main-grid">
+  <!-- ─── HERO ─────────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-bg" aria-hidden="true">
+      <span class="hero-symbol s1">∮</span>
+      <span class="hero-symbol s2">ℤ</span>
+      <span class="hero-symbol s3">∞</span>
+      <span class="hero-symbol s4">√</span>
+      <span class="hero-symbol s5">∑</span>
+      <span class="hero-symbol s6">π</span>
+    </div>
+    <div class="hero-inner">
+      <div class="hero-badge">Number Theory Tool</div>
+      <h1 class="hero-title">
+        Find where&nbsp;
+        <span class="hero-eq">y² = f(n, x)</span>
+        <br />has integer points
+      </h1>
+      <p class="hero-sub">
+        Define any parametric elliptic curve family, set your search range, and watch
+        integer solutions stream to your browser in real time — powered by NumPy,
+        SymPy, and Server-Sent Events.
+      </p>
+      <div class="hero-actions">
+        <a href="#app" class="btn btn-hero">▶&nbsp; Start Exploring</a>
+        <a href="#how-it-works" class="btn btn-ghost hero-ghost">How it works</a>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><strong>23+</strong><span>digit n values</span></div>
+        <div class="hero-stat-sep"></div>
+        <div class="hero-stat"><strong>100M+</strong><span>evaluations / search</span></div>
+        <div class="hero-stat-sep"></div>
+        <div class="hero-stat"><strong>Real-time</strong><span>streaming results</span></div>
+        <div class="hero-stat-sep"></div>
+        <div class="hero-stat"><strong>LaTeX</strong><span>equation import</span></div>
+      </div>
+    </div>
+  </section>
+
+  <main class="main-grid" id="app">
 
     <!-- ─── LEFT PANEL: Inputs ───────────────────────────────────────────── -->
     <aside class="panel panel-inputs">
@@ -338,11 +394,23 @@
   </section>
 
   <footer class="site-footer">
-    <p>
-      Elliptic Curve Integer Point Finder &nbsp;·&nbsp;
-      Source on <a href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website"
-                   target="_blank" rel="noopener">GitHub</a>
-    </p>
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <span class="logo-icon">∮</span>
+        <span class="footer-name">Elliptic Curve Solver</span>
+      </div>
+      <div class="footer-links">
+        <a href="#app">Solver</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#examples">Examples</a>
+        <a href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://en.wikipedia.org/wiki/Elliptic_curve" target="_blank" rel="noopener">What is an elliptic curve?</a>
+      </div>
+      <p class="footer-copy">
+        Built with Flask · SymPy · NumPy · KaTeX &nbsp;·&nbsp;
+        Open source on <a href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">GitHub</a>
+      </p>
+    </div>
   </footer>
 
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
