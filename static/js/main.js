@@ -56,17 +56,17 @@ const EXAMPLES = [
     desc: "Node cubic family; integer points vary richly with n.",
   },
   {
+    name: "General Weierstrass (36n+27)² family",
+    expr: "x**3 + (36*n + 27)**2 * x**2 + (15552*n**3 + 34992*n**2 + 26244*n + 6561)*x + (46656*n**4 + 139968*n**3 + 157464*n**2 + 78713*n + 14748)",
+    nm: 1, nx: 10, xm: -50000, xx: 50000, nd: 1,
+    desc: "y\u00b2 = x\u00b3 + (36n+27)\u00b2x\u00b2 + \u2026 General Weierstrass form with x\u00b2 term. Large x range needed for small n.",
+  },
+  {
     name: "Weierstrass (large-coeff family)",
     expr: "x**3 + (-45349632*n**4 + 419904*n**3)*x + 3*(39182082048*n**6 - 544195584*n**5 + 1259712*n**4 - 19*n)",
     nm: 1, nx: 10, xm: -5000, xx: 5000, nd: 1,
     skipZeroN: true, skipZeroX: true,
     desc: "y\u00b2 = x\u00b3 + (\u221245349632n\u2074 + 419904n\u00b3)x + 3(39182082048n\u2076 \u2212 \u2026). Excludes trivial n=0, x=0 solutions.",
-  },
-  {
-    name: "Weierstrass (36n+27)\u00b2 family",
-    expr: "x**3 + (36*n + 27)**2 * x**2 + (15552*n**3 + 34992*n**2 + 26244*n + 6561)*x + (46656*n**4 + 139968*n**3 + 157464*n**2 + 78713*n + 14748)",
-    nm: -5, nx: 5, xm: -50000, xx: 50000, nd: 1,
-    desc: "y\u00b2 = x\u00b3 + (36n+27)\u00b2x\u00b2 + (15552n\u00b3+\u2026)x + (46656n\u2074+\u2026). Coefficients grow with n; wide x range needed.",
   },
   {
     name: "Hardy–Ramanujan 1729 family",
