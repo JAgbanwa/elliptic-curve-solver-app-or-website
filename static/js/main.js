@@ -59,8 +59,8 @@ const EXAMPLES = [
     name: "Hardy–Ramanujan 1729 family",
     expr: "x**3 - 1729*n**3",
     nm: 1, nx: 50, nd: 1,
-    autoScale: true, xScale: 15,
-    desc: "1729 = 12³+1³ = 10³+9³. Auto-scales x ∈ [−15|n|, 15|n|]; finds integral points for any n.",
+    xMode: "window", xCenterExpr: "icbrt(1729*n**3)", xHalfWidth: 5000,
+    desc: "1729 = 12³+1³ = 10³+9³. Smart Window mode centres on ∛(1729n³) — correct for any n, including 20+ digit values.",
   },
 ];
 
@@ -86,11 +86,14 @@ const tableWrap    = document.getElementById("table-wrap");
 const resultsBody  = document.getElementById("results-tbody");
 const solCount     = document.getElementById("solution-count");
 const emptyState   = document.getElementById("empty-state");
-const exampleGrid  = document.getElementById("example-grid");
-const xAutoScaleChk  = document.getElementById("x-autoscale-chk");
-const xScaleWrap     = document.getElementById("x-scale-wrap");
+const exampleGrid    = document.getElementById("example-grid");
+const xModeSelect    = document.getElementById("x-mode-select");
 const xFixedRange    = document.getElementById("x-fixed-range");
+const xScaleWrap     = document.getElementById("x-scale-wrap");
+const xWindowWrap    = document.getElementById("x-window-wrap");
 const xScaleFactorIn = document.getElementById("x-scale-factor");
+const xCenterExprIn  = document.getElementById("x-center-expr");
+const xHalfWidthIn   = document.getElementById("x-half-width");
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STATE
@@ -231,8 +234,12 @@ function buildSearchURL() {
     n_max:   nMaxIn.value,
     n_denom: nDenomIn.value,
   });
-  if (xAutoScaleChk.checked) {
+  const mode = xModeSelect.value;
+  if (mode === "autoscale") {
     p.set("x_scale", xScaleFactorIn.value);
+  } else if (mode === "window") {
+    p.set("x_center_expr", xCenterExprIn.value.trim());
+    p.set("x_window", xHalfWidthIn.value);
   } else {
     p.set("x_min", xMinIn.value);
     p.set("x_max", xMaxIn.value);
@@ -350,10 +357,11 @@ btnClear.addEventListener("click",  () => {
   setStatus('Enter a curve expression and click Run Search.', "status-idle");
 });
 
-xAutoScaleChk.addEventListener("change", () => {
-  const on = xAutoScaleChk.checked;
-  xScaleWrap.style.display  = on ? "block" : "none";
-  xFixedRange.style.display = on ? "none"  : "block";
+xModeSelect.addEventListener("change", () => {
+  const m = xModeSelect.value;
+  xFixedRange.style.display = m === "fixed"     ? "block" : "none";
+  xScaleWrap.style.display  = m === "autoscale" ? "block" : "none";
+  xWindowWrap.style.display = m === "window"    ? "block" : "none";
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -398,18 +406,21 @@ EXAMPLES.forEach((ex) => {
     nMinIn.value    = ex.nm;
     nMaxIn.value    = ex.nx;
     nDenomIn.value  = ex.nd;
-    const useAutoScale = !!ex.autoScale;
-    xAutoScaleChk.checked     = useAutoScale;
-    xScaleWrap.style.display  = useAutoScale ? "block" : "none";
-    xFixedRange.style.display = useAutoScale ? "none"  : "block";
-    if (useAutoScale) {
+    const mode = ex.xMode || (ex.autoScale ? "autoscale" : "fixed");
+    xModeSelect.value = mode;
+    xFixedRange.style.display = mode === "fixed"     ? "block" : "none";
+    xScaleWrap.style.display  = mode === "autoscale" ? "block" : "none";
+    xWindowWrap.style.display = mode === "window"    ? "block" : "none";
+    if (mode === "autoscale") {
       xScaleFactorIn.value = ex.xScale || 15;
+    } else if (mode === "window") {
+      xCenterExprIn.value = ex.xCenterExpr || "12*n";
+      xHalfWidthIn.value  = ex.xHalfWidth  || 5000;
     } else {
-      xMinIn.value = ex.xm;
-      xMaxIn.value = ex.xx;
+      xMinIn.value = ex.xm ?? -100;
+      xMaxIn.value = ex.xx ?? 100;
     }
     fetchLatex(ex.expr);
-    // scroll to top
     document.querySelector(".main-grid").scrollIntoView({ behavior: "smooth" });
   }
 

@@ -58,6 +58,51 @@ def parse_expr(raw: str):
     return expr
 
 
+# ── Big-integer helpers ───────────────────────────────────────────────────────
+def _icbrt(n: int) -> int:
+    """Exact integer cube-root floor (∛n). Works for arbitrarily large Python ints."""
+    if n == 0:
+        return 0
+    if n < 0:
+        return -_icbrt(-n)
+    x = int(round(float(n) ** (1 / 3)))
+    # Correct downward/upward from the float approximation
+    while x > 0 and x * x * x > n:
+        x -= 1
+    while (x + 1) ** 3 <= n:
+        x += 1
+    return x
+
+
+def _eval_center(center_str: str, n_val: int) -> int:
+    """
+    Evaluate 'center_str' as a Python expression in n=n_val using exact integer
+    arithmetic.  Available names: n, abs, round, int, icbrt.
+    Returns the result as a Python int.
+    """
+    center_str = center_str.strip().replace("^", "**")
+    if len(center_str) > 300:
+        raise ValueError("Center expression too long.")
+    if _FORBIDDEN.search(center_str):
+        raise ValueError("Center expression contains a forbidden keyword.")
+    safe = {
+        "__builtins__": {},
+        "n": n_val,
+        "abs": abs,
+        "round": round,
+        "int": int,
+        "icbrt": _icbrt,
+    }
+    try:
+        result = eval(center_str, safe)  # noqa: S307
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"Cannot evaluate center expression: {exc}") from exc
+    # Preserve exact precision for Python ints; fall back to float for others
+    if isinstance(result, int):
+        return result
+    return int(round(float(result)))
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -94,6 +139,8 @@ def api_search():
         x_max   = int(request.args.get("x_max",   100))
         n_denom = max(1, int(request.args.get("n_denom", 1)))
         x_scale = max(0.0, float(request.args.get("x_scale", 0)))
+        x_window = max(1, int(request.args.get("x_window", 100)))
+        x_center_expr_str = request.args.get("x_center_expr", "").strip()
     except (ValueError, TypeError) as exc:
         def _err():
             yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
@@ -120,13 +167,13 @@ def api_search():
             return
 
         # ── build list of n values (integer or rational) ──────────────────────
-        if n_denom == 1:
-            n_pairs: list[tuple[float, str]] = [
-                (float(i), str(i)) for i in range(n_min, n_max + 1)
-            ]
-        else:
-            from fractions import Fraction  # noqa: PLC0415
+        from fractions import Fraction  # noqa: PLC0415
 
+        if n_denom == 1:
+            _raw = list(range(n_min, n_max + 1))
+            n_pairs: list[tuple[float, str]]      = [(float(i), str(i)) for i in _raw]
+            n_raw:  list[tuple[int, str]]          = [(i,        str(i)) for i in _raw]
+        else:
             seen: set = set()
             fracs: list[Fraction] = []
             for p in range(n_min * n_denom, n_max * n_denom + 1):
@@ -136,6 +183,7 @@ def api_search():
                     fracs.append(frac)
             fracs.sort()
             n_pairs = [(float(f), str(f)) for f in fracs]
+            n_raw   = [(f,        str(f)) for f in fracs]
 
         n_count = len(n_pairs)
         if x_scale > 0:
@@ -148,6 +196,71 @@ def api_search():
         else:
             x_count     = x_max - x_min + 1
             total_evals = n_count * x_count
+
+        # ── Window mode: exact big-integer arithmetic ────────────────────────
+        if x_center_expr_str:
+            try:
+                f_py = lambdify((n_sym, x_sym), expr, modules=[])
+            except Exception as exc:  # noqa: BLE001
+                yield sse({"type": "error", "message": f"Cannot compile: {exc}"})
+                return
+
+            x_count_w   = 2 * x_window + 1
+            total_evals_w = n_count * x_count_w
+            if total_evals_w > WARN_EVALS:
+                yield sse({"type": "warning",
+                           "message": f"Large search: {total_evals_w:,} evaluations. "
+                                      "Results stream as found — click Stop any time."})
+            yield sse({"type": "start", "n_count": n_count,
+                       "x_count": x_count_w, "total_evals": total_evals_w, "x_scale": 0})
+
+            solutions_found_w = 0
+            report_step_w = max(1, n_count // 200)
+            n_with_solutions_w: list[str] = []
+
+            for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+                batch_w: list[dict] = []
+                try:
+                    center = _eval_center(x_center_expr_str, n_raw_val)
+                except ValueError as exc:
+                    yield sse({"type": "error", "message": str(exc)})
+                    return
+
+                for x_val in range(center - x_window, center + x_window + 1):
+                    try:
+                        rhs = f_py(n_raw_val, x_val)
+                        if isinstance(rhs, float):
+                            if not math.isfinite(rhs) or rhs < 0:
+                                continue
+                            rhs_int = round(rhs)
+                            if abs(rhs - rhs_int) > 1e-6:
+                                continue
+                        else:
+                            rhs_int = int(rhs)
+                            if rhs_int < 0:
+                                continue
+                        y_pos = math.isqrt(rhs_int)
+                        if y_pos * y_pos == rhs_int:
+                            batch_w.append({"n": n_disp, "x": str(x_val), "y": str(y_pos)})
+                            if y_pos > 0:
+                                batch_w.append({"n": n_disp, "x": str(x_val), "y": str(-y_pos)})
+                            solutions_found_w += 1
+                    except Exception:  # noqa: BLE001
+                        continue
+
+                if batch_w:
+                    n_with_solutions_w.append(n_disp)
+                    yield sse({"type": "solutions", "data": batch_w})
+
+                if idx % report_step_w == 0 or idx == n_count - 1:
+                    yield sse({"type": "progress",
+                               "pct": round(100 * (idx + 1) / n_count, 1),
+                               "n": n_disp, "solutions": solutions_found_w})
+
+            yield sse({"type": "done", "total_solutions": solutions_found_w,
+                       "n_with_solutions": n_with_solutions_w})
+            return
+        # ── End window mode ──────────────────────────────────────────────────
 
         if total_evals > WARN_EVALS:
             yield sse({
@@ -179,6 +292,17 @@ def api_search():
             # Build per-n x range when auto-scaling
             if x_scale > 0:
                 half = max(10, math.ceil(x_scale * abs(n_float)))
+                # Guard: refuse to build a numpy array larger than 50 M elements
+                if half > 50_000_000:
+                    yield sse({"type": "error",
+                               "message": (
+                                   f"Auto-scale: per-n x range [{-half:,}, {half:,}] is "
+                                   "too large for vectorised search. "
+                                   "Switch to Smart Window mode and set a centre "
+                                   "expression (e.g. icbrt(1729*n**3)) with a small  "
+                                   "half-width instead."
+                               )})
+                    return
                 x_arr = np.arange(-half, half + 1, dtype=np.float64)
                 x_int = np.arange(-half, half + 1, dtype=np.int64)
 

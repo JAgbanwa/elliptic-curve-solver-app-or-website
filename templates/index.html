@@ -64,11 +64,13 @@
         <div class="range-group">
           <div class="range-field">
             <label class="param-label" for="n-min">n&nbsp;min</label>
-            <input id="n-min" class="num-input" type="number" value="-10" />
+            <input id="n-min" class="num-input" type="text" inputmode="numeric"
+                   pattern="-?[0-9]+" value="-10" />
           </div>
           <div class="range-field">
             <label class="param-label" for="n-max">n&nbsp;max</label>
-            <input id="n-max" class="num-input" type="number" value="10" />
+            <input id="n-max" class="num-input" type="text" inputmode="numeric"
+                   pattern="-?[0-9]+" value="10" />
           </div>
           <div class="range-field">
             <label class="param-label" for="n-denom">
@@ -88,34 +90,16 @@
 
       <!-- x range -->
       <section class="param-section">
-        <!-- Auto-scale toggle -->
-        <div class="autoscale-row">
-          <label class="toggle-label" for="x-autoscale-chk">
-            <input type="checkbox" id="x-autoscale-chk" />
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            <span class="toggle-text">Auto-scale x&nbsp;by |n|</span>
-          </label>
-          <div id="x-scale-wrap" style="display:none">
-            <label class="param-label" for="x-scale-factor" style="margin-top:8px">
-              Scale factor&nbsp;<em>k</em>
-              <span class="tooltip-wrap">
-                <span class="tooltip-icon">?</span>
-                <span class="tooltip-text">
-                  For each n, x is searched in [−k·|n|, k·|n|].
-                  Use k&nbsp;≥&nbsp;15 for y²&nbsp;=&nbsp;x³&nbsp;−&nbsp;1729n³
-                  (solutions appear near x&nbsp;≈&nbsp;12n).
-                </span>
-              </span>
-            </label>
-            <input id="x-scale-factor" class="num-input" type="number"
-                   value="15" min="1" max="500" step="1" />
-            <p class="hint">x ∈ [−k|n|, k|n|] per n — ideal for homogeneous families like
-              y² = x³ − 1729n³.</p>
-          </div>
-        </div>
-        <!-- Fixed x range (hidden when auto-scale is on) -->
-        <div id="x-fixed-range">
-          <div class="range-group" style="margin-top:8px">
+        <label class="param-label" for="x-mode-select">x search mode</label>
+        <select id="x-mode-select" class="mode-select">
+          <option value="fixed">Fixed range</option>
+          <option value="autoscale">Auto-scale x by |n|</option>
+          <option value="window">Smart window (exact big-integer)</option>
+        </select>
+
+        <!-- Fixed x range -->
+        <div id="x-fixed-range" style="margin-top:8px">
+          <div class="range-group">
             <div class="range-field">
               <label class="param-label" for="x-min">x&nbsp;min</label>
               <input id="x-min" class="num-input" type="number" value="-100" />
@@ -125,9 +109,57 @@
               <input id="x-max" class="num-input" type="number" value="100" />
             </div>
           </div>
+          <p class="hint">x is always searched over integers. Results stream live. Use <strong>Stop</strong> any time.</p>
+        </div>
+
+        <!-- Auto-scale panel -->
+        <div id="x-scale-wrap" style="display:none; margin-top:8px">
+          <label class="param-label" for="x-scale-factor">
+            Scale factor&nbsp;<em>k</em>
+            <span class="tooltip-wrap">
+              <span class="tooltip-icon">?</span>
+              <span class="tooltip-text">
+                For each n, x is searched in [&#8722;k&#183;|n|, k&#183;|n|].
+                Use k&nbsp;&ge;&nbsp;15 for y&#178;&nbsp;=&nbsp;x&#179;&nbsp;&#8722;&nbsp;1729n&#179;
+                (solutions appear near x&nbsp;&asymp;&nbsp;12n).
+              </span>
+            </span>
+          </label>
+          <input id="x-scale-factor" class="num-input" type="number"
+                 value="15" min="1" max="500" step="1" />
+          <p class="hint">x &isin; [&#8722;k|n|, k|n|] per n &mdash; ideal for homogeneous families.</p>
+        </div>
+
+        <!-- Smart window panel -->
+        <div id="x-window-wrap" style="display:none; margin-top:8px">
+          <label class="param-label" for="x-center-expr">
+            Center expression (in n)
+            <span class="tooltip-wrap">
+              <span class="tooltip-icon">?</span>
+              <span class="tooltip-text">
+                An expression in n giving the approximate x-location of solutions.
+                E.g. "12*n" for y&#178;&nbsp;=&nbsp;x&#179;&nbsp;&#8722;&nbsp;1729n&#179;.
+                Uses exact big-integer arithmetic &mdash; safe for enormous n.
+              </span>
+            </span>
+          </label>
+          <input id="x-center-expr" class="expr-input" type="text"
+                 value="12*n" placeholder="e.g. 12*n" style="margin-bottom:8px" />
+          <label class="param-label" for="x-half-width">
+            Half-width&nbsp;<em>h</em>
+            <span class="tooltip-wrap">
+              <span class="tooltip-icon">?</span>
+              <span class="tooltip-text">
+                x is searched in [center&#8722;h, center+h], so 2h+1 values per n.
+                Total evaluations = n_count &times; (2h+1).
+              </span>
+            </span>
+          </label>
+          <input id="x-half-width" class="num-input" type="number"
+                 value="5000" min="1" step="1" />
           <p class="hint">
-            x is always searched over integers. No hard limit —
-            results stream live. Use <strong>Stop</strong> any time.
+            Exact Python big-integer arithmetic &mdash; correct for n with 20+ digits.
+            Total evals = n_count &times; (2h+1).
           </p>
         </div>
       </section>
