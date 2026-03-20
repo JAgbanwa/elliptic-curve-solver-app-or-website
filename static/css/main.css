@@ -126,6 +126,60 @@ code { font-family: var(--font-mono); font-size: .87em;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
+
+/* ── LaTeX import panel ─────────────────────────────────────────────────── */
+.latex-import {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.latex-import-toggle {
+  padding: 7px 12px;
+  font-size: .82rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.latex-import-toggle::-webkit-details-marker { display: none; }
+.latex-import[open] .latex-import-toggle {
+  border-bottom: 1px solid var(--border);
+  color: var(--accent2);
+}
+.latex-import-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.latex-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  resize: vertical;
+  outline: none;
+  transition: border-color .15s;
+  box-sizing: border-box;
+}
+.latex-textarea:focus { border-color: var(--accent); }
+.latex-import-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.latex-convert-status {
+  font-size: .82rem;
+  color: var(--text-dim);
+}
+.latex-convert-status.ok    { color: var(--green,  #3fb950); }
+.latex-convert-status.error { color: var(--red,    #f85149); }
 .num-input {
   width: 100%; padding: 7px 10px;
   background: var(--bg); border: 1px solid var(--border);

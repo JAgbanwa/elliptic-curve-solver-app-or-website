@@ -52,6 +52,20 @@
         <div class="preview-box" id="latex-preview">
           <span class="dim">LaTeX preview loads here…</span>
         </div>
+        <!-- LaTeX import panel -->
+        <details class="latex-import" id="latex-import">
+          <summary class="latex-import-toggle">&#x2328; Paste LaTeX equation</summary>
+          <div class="latex-import-body">
+            <label class="param-label" for="latex-paste-input">Paste your LaTeX here</label>
+            <textarea id="latex-paste-input" class="latex-textarea"
+                      rows="3" spellcheck="false"
+                      placeholder="e.g. y^2 = x^3 + \left(36n+27\right)^2 x^2 + \ldots"></textarea>
+            <div class="latex-import-row">
+              <button id="btn-convert-latex" class="btn btn-ghost" type="button">&#10003; Convert to Python</button>
+              <span id="latex-convert-status" class="latex-convert-status"></span>
+            </div>
+          </div>
+        </details>
         <p class="hint">
           Use Python syntax: <code>**</code> for powers, <code>*</code> for
           multiplication.  Variables: <code>n</code> and <code>x</code>.

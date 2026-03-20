@@ -82,6 +82,9 @@ const EXAMPLES = [
    ═══════════════════════════════════════════════════════════════════════════ */
 const exprInput    = document.getElementById("expr-input");
 const latexPreview = document.getElementById("latex-preview");
+const latexPasteInput   = document.getElementById("latex-paste-input");
+const btnConvertLatex   = document.getElementById("btn-convert-latex");
+const latexConvertStatus = document.getElementById("latex-convert-status");
 const nMinIn       = document.getElementById("n-min");
 const nMaxIn       = document.getElementById("n-max");
 const nDenomIn     = document.getElementById("n-denom");
@@ -162,6 +165,37 @@ exprInput.addEventListener("input", () => {
 
 // Initial render
 fetchLatex(exprInput.value);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LATEX IMPORT
+   ═══════════════════════════════════════════════════════════════════════════ */
+btnConvertLatex.addEventListener("click", async () => {
+  const raw = latexPasteInput.value.trim();
+  if (!raw) { latexConvertStatus.textContent = "Paste a LaTeX expression first."; latexConvertStatus.className = "latex-convert-status error"; return; }
+  latexConvertStatus.textContent = "Converting…";
+  latexConvertStatus.className = "latex-convert-status";
+  try {
+    const resp = await fetch("/api/from_latex", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ latex: raw }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      exprInput.value = data.expr;
+      latexConvertStatus.textContent = "✓ Loaded into expression field!";
+      latexConvertStatus.className = "latex-convert-status ok";
+      fetchLatex(data.expr);
+      document.getElementById("latex-import").open = false;
+    } else {
+      latexConvertStatus.textContent = "Error: " + data.error;
+      latexConvertStatus.className = "latex-convert-status error";
+    }
+  } catch (_) {
+    latexConvertStatus.textContent = "Request failed — is the server running?";
+    latexConvertStatus.className = "latex-convert-status error";
+  }
+});
 
 /* ═══════════════════════════════════════════════════════════════════════════
    N SUMMARY

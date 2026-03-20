@@ -121,6 +121,45 @@ def api_latex():
         return {"ok": False, "error": str(exc)}
 
 
+@app.route("/api/from_latex", methods=["POST"])
+def api_from_latex():
+    """Convert a LaTeX equation (or RHS expression) to a Python-syntax expression."""
+    data = request.get_json(silent=True) or {}
+    latex_raw = data.get("latex", "").strip()
+    if not latex_raw:
+        return {"ok": False, "error": "No LaTeX provided."}
+
+    # Strip leading  y^2 =  /  y² =  /  y^{2} =  so users can paste whole equations
+    cleaned = re.sub(
+        r'^\s*y\s*(?:\^\{?2\}?|²|\*\*2)\s*=\s*', '', latex_raw, flags=re.IGNORECASE
+    ).strip()
+    if not cleaned:
+        return {"ok": False, "error": "Expression is empty after stripping y² = prefix."}
+
+    try:
+        from sympy.parsing.latex import parse_latex  # noqa: PLC0415
+        sym_expr = parse_latex(cleaned)
+    except ImportError:
+        return {"ok": False, "error": "LaTeX parsing requires antlr4-python3-runtime==4.11 (pip install antlr4-python3-runtime==4.11)."}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"Cannot parse LaTeX: {exc}"}
+
+    # Validate: only n and x symbols allowed
+    from sympy import symbols as _syms  # noqa: PLC0415
+    allowed = {n_sym, x_sym}
+    unknown = sym_expr.free_symbols - allowed
+    if unknown:
+        return {"ok": False, "error": f"Unknown symbol(s) in LaTeX: {', '.join(str(s) for s in unknown)}. Only n and x are allowed."}
+
+    # Convert to Python string and validate through our security parser
+    python_expr = str(sym_expr)
+    try:
+        validated = parse_expr(python_expr)
+        return {"ok": True, "expr": python_expr, "latex": sym_latex(validated)}
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @app.route("/api/search")
 def api_search():
     """
