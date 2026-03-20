@@ -56,6 +56,13 @@ const EXAMPLES = [
     desc: "Node cubic family; integer points vary richly with n.",
   },
   {
+    name: "Weierstrass (large-coeff family)",
+    expr: "x**3 + (-45349632*n**4 + 419904*n**3)*x + 3*(39182082048*n**6 - 544195584*n**5 + 1259712*n**4 - 19*n)",
+    nm: 1, nx: 10, xm: -5000, xx: 5000, nd: 1,
+    skipZeroN: true, skipZeroX: true,
+    desc: "y\u00b2 = x\u00b3 + (\u221245349632n\u2074 + 419904n\u00b3)x + 3(39182082048n\u2076 \u2212 \u2026). Excludes trivial n=0, x=0 solutions.",
+  },
+  {
     name: "Hardy–Ramanujan 1729 family",
     expr: "x**3 - 1729*n**3",
     nm: 1, nx: 50, nd: 1,
@@ -94,6 +101,8 @@ const xWindowWrap    = document.getElementById("x-window-wrap");
 const xScaleFactorIn = document.getElementById("x-scale-factor");
 const xCenterExprIn  = document.getElementById("x-center-expr");
 const xHalfWidthIn   = document.getElementById("x-half-width");
+const skipZeroNChk   = document.getElementById("skip-zero-n");
+const skipZeroXChk   = document.getElementById("skip-zero-x");
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STATE
@@ -244,6 +253,8 @@ function buildSearchURL() {
     p.set("x_min", xMinIn.value);
     p.set("x_max", xMaxIn.value);
   }
+  if (skipZeroNChk.checked) p.set("skip_zero_n", "1");
+  if (skipZeroXChk.checked) p.set("skip_zero_x", "1");
   return "/api/search?" + p.toString();
 }
 
@@ -426,6 +437,8 @@ EXAMPLES.forEach((ex) => {
       xMinIn.value = ex.xm ?? -100;
       xMaxIn.value = ex.xx ?? 100;
     }
+    skipZeroNChk.checked = !!ex.skipZeroN;
+    skipZeroXChk.checked = !!ex.skipZeroX;
     fetchLatex(ex.expr);
     document.querySelector(".main-grid").scrollIntoView({ behavior: "smooth" });
   }

@@ -141,6 +141,8 @@ def api_search():
         x_scale = max(0.0, float(request.args.get("x_scale", 0)))
         x_window = max(1, int(request.args.get("x_window", 100)))
         x_center_expr_str = request.args.get("x_center_expr", "").strip()
+        skip_zero_n = request.args.get("skip_zero_n", "") == "1"
+        skip_zero_x = request.args.get("skip_zero_x", "") == "1"
     except (ValueError, TypeError) as exc:
         def _err():
             yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
@@ -219,6 +221,8 @@ def api_search():
             n_with_solutions_w: list[str] = []
 
             for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+                if skip_zero_n and n_raw_val == 0:
+                    continue
                 batch_w: list[dict] = []
                 try:
                     center = _eval_center(x_center_expr_str, n_raw_val)
@@ -227,6 +231,8 @@ def api_search():
                     return
 
                 for x_val in range(center - x_window, center + x_window + 1):
+                    if skip_zero_x and x_val == 0:
+                        continue
                     try:
                         rhs = f_py(n_raw_val, x_val)
                         if isinstance(rhs, float):
@@ -287,6 +293,8 @@ def api_search():
             x_int = np.arange(x_min, x_max + 1, dtype=np.int64)
 
         for idx, (n_float, n_disp) in enumerate(n_pairs):
+            if skip_zero_n and n_float == 0.0:
+                continue
             batch: list[dict] = []
 
             # Build per-n x range when auto-scaling
@@ -330,6 +338,8 @@ def api_search():
                     sq_mask  = y_cand * y_cand == cand_rhs
                     for j in np.where(sq_mask)[0]:
                         x_val = int(cand_x[j])
+                        if skip_zero_x and x_val == 0:
+                            continue
                         y_pos = int(y_cand[j])
                         batch.append({"n": n_disp, "x": x_val, "y":  y_pos})
                         if y_pos > 0:

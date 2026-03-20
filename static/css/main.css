@@ -332,6 +332,29 @@ tbody td:first-child { color: var(--text-dim); font-size: .78rem; }
 }
 .site-footer a { color: var(--accent2); }
 
+/* ── Checkbox filter row ─────────────────────────────────────────────────── */
+.checkbox-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.chk-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .85rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.chk-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 /* ── Warning banner ─────────────────────────────────────────────────────── */
 .warning-banner {
   background: rgba(210,153,34,.12);
