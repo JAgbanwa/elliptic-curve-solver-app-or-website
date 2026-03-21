@@ -24,7 +24,7 @@ from sympy.core.sympify import SympifyError
 
 app = Flask(__name__)
 
-n_sym, x_sym = symbols("n x")
+n_sym, x_sym, y_sym = symbols("n x y")
 
 # ── Security ───────────────────────────────────────────────────────────────────
 _FORBIDDEN = re.compile(
@@ -53,6 +53,37 @@ def parse_expr(raw: str):
     except SympifyError as exc:
         raise ValueError(f"Cannot parse expression: {exc}") from exc
     bad = expr.free_symbols - {n_sym, x_sym}
+    if bad:
+        raise ValueError(f"Unknown symbol(s): {', '.join(str(s) for s in bad)}")
+    return expr
+
+
+def parse_general_eq(raw: str):
+    """
+    Parse a full Diophantine equation such as 'y**3 - y = x**4 - 2*x - 2'
+    (or just 'F(n,x,y)' interpreted as = 0).
+    Returns the expression F where the equation is F = 0.
+    Allowed symbols: n, x, y.
+    """
+    raw = raw.strip().replace("^", "**")
+    if len(raw) > 400:
+        raise ValueError("Equation too long (max 400 characters).")
+    if _FORBIDDEN.search(raw):
+        raise ValueError("Equation contains a forbidden keyword.")
+    if "=" in raw:
+        left, right = raw.split("=", 1)
+        try:
+            lhs = sympify(left,  locals={"n": n_sym, "x": x_sym, "y": y_sym}, evaluate=True)
+            rhs = sympify(right, locals={"n": n_sym, "x": x_sym, "y": y_sym}, evaluate=True)
+            expr = lhs - rhs
+        except SympifyError as exc:
+            raise ValueError(f"Cannot parse equation: {exc}") from exc
+    else:
+        try:
+            expr = sympify(raw, locals={"n": n_sym, "x": x_sym, "y": y_sym}, evaluate=True)
+        except SympifyError as exc:
+            raise ValueError(f"Cannot parse expression: {exc}") from exc
+    bad = expr.free_symbols - {n_sym, x_sym, y_sym}
     if bad:
         raise ValueError(f"Unknown symbol(s): {', '.join(str(s) for s in bad)}")
     return expr
@@ -767,6 +798,195 @@ def api_search():
                     "n":         n_disp,
                     "solutions": solutions_found,
                 })
+
+        yield sse({"type": "done", "total_solutions": solutions_found,
+                   "n_with_solutions": n_with_solutions})
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/diophantine")
+def api_diophantine():  # noqa: C901
+    """
+    SSE endpoint for general polynomial Diophantine equations F(n, x, y) = 0.
+
+    Strategy: for each (n, x) pair, form the polynomial P(y) = F(n_val, x_val, y),
+    find all approximate real roots via numpy.roots(), round to nearby integers,
+    then verify exactly with Python arbitrary-precision arithmetic.
+
+    No y-range required — numpy finds ALL roots of the y-polynomial up to its degree.
+    """
+    eq_str = request.args.get("eq", "").strip()
+    try:
+        x_min   = int(request.args.get("x_min",  -50))
+        x_max   = int(request.args.get("x_max",   50))
+        n_min   = int(request.args.get("n_min",    0))
+        n_max   = int(request.args.get("n_max",    0))
+        n_denom = max(1, int(request.args.get("n_denom", 1)))
+        skip_zero_n = request.args.get("skip_zero_n", "") == "1"
+        skip_zero_x = request.args.get("skip_zero_x", "") == "1"
+    except (ValueError, TypeError) as exc:
+        def _err():
+            yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
+        return Response(stream_with_context(_err()), mimetype="text/event-stream")
+
+    def sse(obj: dict) -> str:
+        return f"data: {json.dumps(obj)}\n\n"
+
+    def generate():  # noqa: C901
+        if not eq_str:
+            yield sse({"type": "error", "message": "No equation provided."})
+            return
+
+        # ── Parse equation ───────────────────────────────────────────────────
+        try:
+            expr = parse_general_eq(eq_str)
+        except ValueError as exc:
+            yield sse({"type": "error", "message": str(exc)})
+            return
+
+        if y_sym not in expr.free_symbols:
+            yield sse({"type": "error",
+                       "message": "The equation must contain y. "
+                                  "(For y\u00b2 = f(n,x) curves, use the main solver.)" })
+            return
+
+        # ── Require polynomial in y ──────────────────────────────────────────
+        from sympy import Poly, expand as sp_expand  # noqa: PLC0415
+        try:
+            poly_t   = Poly(sp_expand(expr), y_sym, domain="EX")
+            deg_y    = poly_t.degree()
+            if deg_y < 1:
+                raise ValueError("y appears with degree 0.")
+            coeff_syms = poly_t.all_coeffs()   # [c_d(n,x), …, c_0(n,x)]
+        except Exception as exc:  # noqa: BLE001
+            yield sse({"type": "error",
+                       "message": f"Equation must be polynomial in y "
+                                  f"(no y in denominators or under radicals). "
+                                  f"Detail: {exc}"})
+            return
+
+        # Compile coefficient evaluators (floating-point for root-finding)
+        try:
+            coeff_fns_flt = [
+                lambdify((n_sym, x_sym), c, modules=["numpy", "math"])
+                for c in coeff_syms
+            ]
+        except Exception as exc:  # noqa: BLE001
+            yield sse({"type": "error", "message": f"Cannot compile coefficients: {exc}"})
+            return
+
+        # Full exact evaluator (Python big-integer, for verification)
+        try:
+            f_exact = lambdify((n_sym, x_sym, y_sym), expr, modules=[])
+        except Exception as exc:  # noqa: BLE001
+            yield sse({"type": "error", "message": f"Cannot compile equation: {exc}"})
+            return
+
+        # ── Build n values ───────────────────────────────────────────────────
+        from fractions import Fraction  # noqa: PLC0415
+        if n_denom == 1:
+            n_raw: list[tuple] = [(i, str(i)) for i in range(n_min, n_max + 1)]
+        else:
+            seen: set = set()
+            fracs: list[Fraction] = []
+            for p_int in range(n_min * n_denom, n_max * n_denom + 1):
+                frac = Fraction(p_int, n_denom)
+                if frac not in seen and n_min <= frac <= n_max:
+                    seen.add(frac)
+                    fracs.append(frac)
+            fracs.sort()
+            n_raw = [(f, str(f)) for f in fracs]
+
+        n_count    = len(n_raw)
+        x_count    = x_max - x_min + 1
+        total_evals = n_count * x_count
+
+        WARN_EVALS = 100_000_000
+        if total_evals > WARN_EVALS:
+            yield sse({"type": "warning",
+                       "message": f"Large search: {total_evals:,} evaluations. "
+                                  "Results stream live \u2014 click Stop any time."})
+
+        yield sse({"type": "start", "n_count": n_count,
+                   "x_count": x_count, "total_evals": total_evals, "x_scale": 0})
+
+        solutions_found    = 0
+        n_with_solutions: list[str] = []
+        report_step = max(1, n_count // 200)
+
+        for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+            if skip_zero_n and n_raw_val == 0:
+                continue
+
+            batch: list[dict] = []
+            seen_xy: set      = set()   # deduplicate per (x, y)
+            n_float = float(n_raw_val)
+
+            for x_val in range(x_min, x_max + 1):
+                if skip_zero_x and x_val == 0:
+                    continue
+                x_float = float(x_val)
+
+                try:
+                    # Evaluate all y-polynomial coefficients at this (n, x)
+                    flt_c: list[float] = []
+                    for cf in coeff_fns_flt:
+                        v = cf(n_float, x_float)
+                        flt_c.append(float(v) if np.isscalar(v) else float(np.asarray(v).flat[0]))
+
+                    # Trim leading zeros (handles lower-degree specialisations)
+                    while len(flt_c) > 1 and flt_c[0] == 0.0:
+                        flt_c.pop(0)
+                    if len(flt_c) < 2:
+                        continue   # degenerate: no y dependence at this x
+
+                    # numpy.roots finds ALL roots of the polynomial
+                    approx_roots = np.roots(flt_c)
+
+                    # Collect integer candidates ±1 around each real root
+                    y_cands: set[int] = set()
+                    for r in approx_roots:
+                        if abs(r.imag) < 0.5:
+                            yr = r.real
+                            y_cands.add(math.floor(yr))
+                            y_cands.add(math.ceil(yr))
+
+                except Exception:   # noqa: BLE001
+                    continue
+
+                for y_cand in y_cands:
+                    key = (x_val, y_cand)
+                    if key in seen_xy:
+                        continue
+                    # Exact integer verification
+                    try:
+                        val = f_exact(n_raw_val, x_val, y_cand)
+                        if isinstance(val, float):
+                            ok = math.isfinite(val) and abs(val) < 0.5
+                        else:
+                            ok = (val == 0)
+                        if ok:
+                            seen_xy.add(key)
+                            batch.append({"n": n_disp,
+                                          "x": str(x_val),
+                                          "y": str(y_cand)})
+                            solutions_found += 1
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            if batch:
+                n_with_solutions.append(n_disp)
+                yield sse({"type": "solutions", "data": batch})
+
+            if idx % report_step == 0 or idx == n_count - 1:
+                yield sse({"type": "progress",
+                           "pct": round(100 * (idx + 1) / n_count, 1),
+                           "n": n_disp, "solutions": solutions_found})
 
         yield sse({"type": "done", "total_solutions": solutions_found,
                    "n_with_solutions": n_with_solutions})

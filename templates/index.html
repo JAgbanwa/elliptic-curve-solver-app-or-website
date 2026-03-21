@@ -96,8 +96,14 @@
     <aside class="panel panel-inputs">
       <h2 class="panel-title">Configure Search</h2>
 
-      <!-- Curve expression -->
-      <section class="param-section">
+      <!-- Solver mode tabs -->
+      <div class="solver-tabs">
+        <button id="tab-ec"  class="solver-tab active" type="button">y&#178;&nbsp;=&nbsp;f(n,&thinsp;x)</button>
+        <button id="tab-gen" class="solver-tab" type="button">General Diophantine</button>
+      </div>
+
+      <!-- Curve expression (y² = f mode) -->
+      <section class="param-section" id="ec-expr-section">
         <label class="param-label" for="expr-input">
           Right-hand side &nbsp;— &nbsp;
           <span class="dim">y² = </span><strong>f(n, x)</strong>
@@ -158,8 +164,8 @@
         </div>
       </section>
 
-      <!-- x range -->
-      <section class="param-section">
+      <!-- x range (y² = f mode only) -->
+      <section class="param-section" id="ec-x-section">
         <label class="param-label" for="x-mode-select">x search mode</label>
         <select id="x-mode-select" class="mode-select">
           <option value="fixed">Fixed range</option>
@@ -313,6 +319,43 @@
         </div>
       </section>
 
+
+      <!-- ─── GENERAL DIOPHANTINE INPUTS (hidden by default) ───────────── -->
+      <section id="gen-inputs" class="param-section" style="display:none">
+        <label class="param-label" for="gen-eq-input">
+          Full equation &nbsp;—&nbsp;
+          <strong>F(x,&thinsp;y) = 0</strong>
+        </label>
+        <input id="gen-eq-input" class="text-input" type="text"
+               placeholder="e.g. y**3 - y = x**4 - 2*x - 2"
+               autocomplete="off" spellcheck="false" />
+        <div class="preview-box" id="gen-eq-preview">
+          <span class="dim">LaTeX preview loads here…</span>
+        </div>
+        <p class="hint">
+          Enter as <code>LHS = RHS</code> or as a single expression (= 0).
+          Variables: <code>x</code>, <code>y</code>, and optionally <code>n</code>.
+          Use <code>**</code> for powers, <code>*</code> for multiplication.
+          For each integer x in the range, all integer y are found by solving
+          the polynomial in y — no y-range needed.
+        </p>
+        <!-- x range for general mode -->
+        <div class="range-group" style="margin-top:10px">
+          <div class="range-field">
+            <label class="param-label" for="gen-x-min">x&nbsp;min</label>
+            <input id="gen-x-min" class="num-input" type="number" value="-50" />
+          </div>
+          <div class="range-field">
+            <label class="param-label" for="gen-x-max">x&nbsp;max</label>
+            <input id="gen-x-max" class="num-input" type="number" value="50" />
+          </div>
+        </div>
+        <p class="hint" style="margin-top:6px">
+          n range above still applies — set n&thinsp;min&nbsp;=&nbsp;n&thinsp;max&nbsp;=&nbsp;0
+          when the equation has no&nbsp;<em>n</em>.
+        </p>
+      </section>
+
       <!-- Skip-zero filter -->
       <section class="param-section">
         <label class="param-label">Exclude from results</label>
@@ -388,7 +431,7 @@
                 <th>n</th>
                 <th>x</th>
                 <th>y</th>
-                <th>Verify&nbsp;(y² = f(n,x))</th>
+                <th id="th-verify">Verify&nbsp;(y&#178;&nbsp;=&nbsp;f(n,x))</th>
               </tr>
             </thead>
             <tbody id="results-tbody"></tbody>

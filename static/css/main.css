@@ -767,6 +767,48 @@ tbody td:first-child { color: var(--text-dim); font-size: .78rem; }
 }
 .ci-lmfdb-btn:hover { background: var(--accent2); color: var(--bg); }
 
+/* ── Solver mode tabs ─────────────────────────────────────────────────────── */
+.solver-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.solver-tab {
+  flex: 1;
+  padding: 9px 12px;
+  background: var(--surface2);
+  color: var(--text-dim);
+  border: none;
+  cursor: pointer;
+  font-size: .82rem;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background .15s, color .15s;
+}
+.solver-tab:not(:last-child) { border-right: 1px solid var(--border); }
+.solver-tab:hover { background: var(--surface); color: var(--text); }
+.solver-tab.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff;
+}
+
+/* ── General Diophantine example badge ────────────────────────────────────── */
+.example-mode-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: rgba(88,166,255,.12);
+  border: 1px solid rgba(88,166,255,.35);
+  color: var(--accent2);
+  border-radius: 10px;
+  font-size: .68rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
 /* ── Hero responsive ────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .hero { padding: 64px 20px 56px; }

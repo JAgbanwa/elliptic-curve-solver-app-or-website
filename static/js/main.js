@@ -105,6 +105,35 @@ const EXAMPLES = [
     xStepExpr:  "1",
     desc: "y\u00b2=x\u00b3+17 (n unused). Expression range finds all integral x up to 100: x=2 (y=5), x=4 (y=9), x=8 (y=23), x=43 (y=282), x=52 (y=375). Set start=\"10**10\", end=\"10**10+10**6\" to probe a trillion-scale region.",
   },
+  // ──── General Diophantine examples ───────────────────────────────────────────
+  {
+    name: "y\u00b2 + y = x\u00b3 \u2212 x  (gen. poly.)",
+    solverMode: "gen",
+    eq: "y**2 + y = x**3 - x",
+    nm: 0, nx: 0, xm: -20, xx: 20,
+    desc: "y(y+1) = x(x\u00b2\u22121). Solutions: (0,0),(0,\u22121),(1,0),(1,\u22121),(\u22121,0),(\u22121,\u22121),(2,2),(2,\u22123),(\u22122,1),(\u22122,\u22122). Polynomial degree 2 in y — two solutions per x.",
+  },
+  {
+    name: "Pythagorean triples: x\u00b2 + y\u00b2 = n\u00b2",
+    solverMode: "gen",
+    eq: "x**2 + y**2 = n**2",
+    nm: 1, nx: 30, xm: 0, xx: 30,
+    desc: "All Pythagorean triples with legs up to 30. Finds (3,4,5), (5,12,13), (8,15,17), (20,21,29), etc. n is the hypotenuse; x,y are the legs.",
+  },
+  {
+    name: "Sum of two cubes: x\u00b3 + y\u00b3 = n",
+    solverMode: "gen",
+    eq: "x**3 + y**3 = n",
+    nm: 1, nx: 2000, xm: -15, xx: 15,
+    desc: "Which n are a sum of two integer cubes? Finds n=1729=12\u00b3+1\u00b3=10\u00b3+9\u00b3 (Hardy\u2013Ramanujan taxi-cab), n=1=1+0, n=2=1+1, n=9=2+1, etc.",
+  },
+  {
+    name: "y\u00b3 \u2212 y = x\u2074 \u2212 2x \u2212 2",
+    solverMode: "gen",
+    eq: "y**3 - y = x**4 - 2*x - 2",
+    nm: 0, nx: 0, xm: -100, xx: 100,
+    desc: "The equation from the user request. Degree 3 in y, degree 4 in x. For each x, numpy solves y\u00b3\u2212y\u2212(x\u2074\u22122x\u22122) = 0 exactly. Widen x range if no solutions found here.",
+  },
 ];
 
 
@@ -150,6 +179,17 @@ const xEndExprIn     = document.getElementById("x-end-expr");
 const xStepExprIn    = document.getElementById("x-step-expr");
 const skipZeroNChk   = document.getElementById("skip-zero-n");
 const skipZeroXChk   = document.getElementById("skip-zero-x");
+// Mode tabs & general Diophantine inputs
+const tabEC          = document.getElementById("tab-ec");
+const tabGen         = document.getElementById("tab-gen");
+const ecExprSection  = document.getElementById("ec-expr-section");
+const ecXSection     = document.getElementById("ec-x-section");
+const genInputs      = document.getElementById("gen-inputs");
+const genEqIn        = document.getElementById("gen-eq-input");
+const genEqPreview   = document.getElementById("gen-eq-preview");
+const genXMinIn      = document.getElementById("gen-x-min");
+const genXMaxIn      = document.getElementById("gen-x-max");
+const thVerify       = document.getElementById("th-verify");
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STATE
@@ -159,6 +199,7 @@ let allSolutions= [];     // [{n, x, y}, …]
 let rowIndex    = 0;      // global row counter for table
 let nTotalCount = 0;      // total n-values in last search (for n-summary)
 let lastGroupN  = null;   // n-value of the current table group header
+let currentSolverMode = "ec";  // "ec" | "gen"
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LATEX PREVIEW
@@ -352,7 +393,8 @@ function startSearch() {
   btnSearch.disabled = true;
   btnStop.disabled   = false;
 
-  evtSource = new EventSource(buildSearchURL());
+  const searchUrl = currentSolverMode === "gen" ? buildDiophURL() : buildSearchURL();
+  evtSource = new EventSource(searchUrl);
 
   evtSource.onmessage = (ev) => {
     let msg;
@@ -540,15 +582,73 @@ xModeSelect.addEventListener("change", () => {
   xExprRangeWrap.style.display= m === "exprrange" ? "block" : "none";
 });
 
+/* ═════════════════════════════════════════════════════════════════════════════
+   SOLVER MODE SWITCH
+   ═════════════════════════════════════════════════════════════════════════════ */
+function switchSolverMode(mode) {
+  currentSolverMode = mode;
+  const isEC = mode === "ec";
+  ecExprSection.style.display = isEC ? "" : "none";
+  ecXSection.style.display    = isEC ? "" : "none";
+  genInputs.style.display     = isEC ? "none" : "";
+  tabEC.classList.toggle("active", isEC);
+  tabGen.classList.toggle("active", !isEC);
+  if (thVerify) thVerify.textContent =
+    isEC ? "Verify\u00a0(y\u00b2\u00a0=\u00a0f(n,x))" : "Verify\u00a0(F\u00a0=\u00a00)";
+  clearResults();
+}
+
+tabEC.addEventListener("click",  () => switchSolverMode("ec"));
+tabGen.addEventListener("click", () => switchSolverMode("gen"));
+
+/* LaTeX preview for general Diophantine equation */
+let genPreviewTimer = null;
+
+function renderGenPreview(eq) {
+  if (!eq) {
+    genEqPreview.innerHTML = '<span class="dim">LaTeX preview loads here\u2026</span>';
+    return;
+  }
+  try {
+    const tex = eq.replace(/\^/g, "**").replace(/\*\*/g, "^").replace(/\*/g, " \\cdot ");
+    katex.render(tex, genEqPreview, { throwOnError: false });
+  } catch (_) {
+    genEqPreview.textContent = eq;
+  }
+}
+
+genEqIn.addEventListener("input", () => {
+  clearTimeout(genPreviewTimer);
+  genPreviewTimer = setTimeout(() => renderGenPreview(genEqIn.value), 400);
+});
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   GENERAL DIOPHANTINE URL BUILDER
+   ═════════════════════════════════════════════════════════════════════════════ */
+function buildDiophURL() {
+  const p = new URLSearchParams({
+    eq:      genEqIn.value.trim(),
+    x_min:   genXMinIn.value,
+    x_max:   genXMaxIn.value,
+    n_min:   nMinIn.value,
+    n_max:   nMaxIn.value,
+    n_denom: nDenomIn.value,
+  });
+  if (skipZeroNChk.checked) p.set("skip_zero_n", "1");
+  if (skipZeroXChk.checked) p.set("skip_zero_x", "1");
+  return "/api/diophantine?" + p.toString();
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    CSV EXPORT
    ═══════════════════════════════════════════════════════════════════════════ */
 btnExport.addEventListener("click", () => {
   if (!allSolutions.length) return;
-  const expr = exprInput.value.trim();
-  const header = "n,x,y,curve_expr\n";
+  const isGen  = currentSolverMode === "gen";
+  const eqStr  = isGen ? genEqIn.value.trim() : exprInput.value.trim();
+  const header = isGen ? "n,x,y,equation\n" : "n,x,y,curve_expr\n";
   const rows = allSolutions
-    .map(({ n, x, y }) => `${n},${x},${y},"${expr.replace(/"/g, '""')}"`)
+    .map(({ n, x, y }) => `${n},${x},${y},"${eqStr.replace(/"/g, '""')}"`)    .join("\n");
     .join("\n");
   const blob = new Blob([header + rows], { type: "text/csv" });
   const a = document.createElement("a");
@@ -569,15 +669,39 @@ EXAMPLES.forEach((ex) => {
   card.setAttribute("aria-label", "Load example: " + ex.name);
 
   // render KaTeX inside the card (after the DOM is ready)
+  const isGenMode = ex.solverMode === "gen";
+  const modeBadge = isGenMode
+    ? `<span class="example-mode-badge">General Dioph.</span>`
+    : "";
+  const exprLine  = isGenMode
+    ? `<code>${escHtml(ex.eq || "")}</code>`
+    : `<code>y\u00b2 = ${escHtml(ex.expr || "")}</code>`;
   card.innerHTML = `
-    <div class="example-name">${escHtml(ex.name)}</div>
-    <div class="example-expr"><code>y² = ${escHtml(ex.expr)}</code></div>
+    <div class="example-name">${escHtml(ex.name)}${modeBadge}</div>
+    <div class="example-expr">${exprLine}</div>
     <div class="example-math" id="ex-math-${EXAMPLES.indexOf(ex)}"></div>
     <div class="example-desc">${escHtml(ex.desc)}</div>
     <div class="example-load">↗ Load this example</div>`;
   exampleGrid.appendChild(card);
 
   function loadExample() {
+    // ── General Diophantine mode ──────────────────────────────────────────
+    if (ex.solverMode === "gen") {
+      switchSolverMode("gen");
+      genEqIn.value   = ex.eq || "";
+      nMinIn.value    = ex.nm ?? 0;
+      nMaxIn.value    = ex.nx ?? 0;
+      nDenomIn.value  = ex.nd ?? 1;
+      genXMinIn.value = ex.xm ?? -50;
+      genXMaxIn.value = ex.xx ?? 50;
+      skipZeroNChk.checked = !!ex.skipZeroN;
+      skipZeroXChk.checked = !!ex.skipZeroX;
+      renderGenPreview(ex.eq || "");
+      document.querySelector(".main-grid").scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    // ── y² = f(n,x) mode ─────────────────────────────────────────────────
+    switchSolverMode("ec");
     exprInput.value = ex.expr;
     nMinIn.value    = ex.nm;
     nMaxIn.value    = ex.nx;
@@ -620,12 +744,13 @@ window.addEventListener("load", () => {
   EXAMPLES.forEach((ex, i) => {
     const el = document.getElementById("ex-math-" + i);
     if (!el) return;
+    const raw = ex.solverMode === "gen" ? (ex.eq || "") : ("y^2 = " + (ex.expr || ""));
     try {
-      katex.render("y^2 = " + ex.expr.replace(/\*\*/g, "^").replace(/\*/g, "\\cdot "), el, {
+      katex.render(raw.replace(/\*\*/g, "^").replace(/\*/g, "\\cdot "), el, {
         throwOnError: false, displayMode: false,
       });
     } catch (_) {
-      el.textContent = "y² = " + ex.expr;
+      el.textContent = raw;
     }
   });
 });
