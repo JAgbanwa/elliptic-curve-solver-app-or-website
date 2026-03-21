@@ -648,7 +648,7 @@ btnExport.addEventListener("click", () => {
   const eqStr  = isGen ? genEqIn.value.trim() : exprInput.value.trim();
   const header = isGen ? "n,x,y,equation\n" : "n,x,y,curve_expr\n";
   const rows = allSolutions
-    .map(({ n, x, y }) => `${n},${x},${y},"${eqStr.replace(/"/g, '""')}"`)    .join("\n");
+    .map(({ n, x, y }) => `${n},${x},${y},"${eqStr.replace(/"/g, '""')}"`)
     .join("\n");
   const blob = new Blob([header + rows], { type: "text/csv" });
   const a = document.createElement("a");
