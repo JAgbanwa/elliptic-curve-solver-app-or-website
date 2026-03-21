@@ -399,6 +399,78 @@ function startSearch() {
           `${allSolutions.length} solution${allSolutions.length !== 1 ? "s" : ""}`;
         break;
 
+      case "curve_info": {
+        const ci = msg;
+        const def = v => v !== undefined && v !== null ? escHtml(String(v)) : "";
+
+        const badPrimes = Array.isArray(ci.primes_bad_reduction)
+          ? (ci.primes_bad_reduction.length ? ci.primes_bad_reduction.join(", ") : "none")
+          : def(ci.primes_bad_reduction);
+
+        const errNote = ci.error
+          ? `<div class="ci-error">⚠ ${def(ci.error)}</div>`
+          : "";
+
+        let body = errNote;
+
+        if (ci.A !== undefined) {
+          body += `
+            <div class="ci-section">
+              <div class="ci-sh">Short Weierstrass form</div>
+              <div class="ci-kv"><span class="ci-key">Equation</span><span class="ci-val">${def(ci.short_weierstrass)}</span></div>
+              <div class="ci-kv"><span class="ci-key">A</span><span class="ci-val">${def(ci.A)}</span></div>
+              <div class="ci-kv"><span class="ci-key">B</span><span class="ci-val">${def(ci.B)}</span></div>
+            </div>`;
+        }
+
+        if (ci.discriminant !== undefined) {
+          body += `
+            <div class="ci-section">
+              <div class="ci-sh">Invariants</div>
+              <div class="ci-kv"><span class="ci-key">Discriminant \u0394</span><span class="ci-val">${def(ci.discriminant)}</span></div>
+              <div class="ci-kv"><span class="ci-key"><i>j</i>-invariant</span><span class="ci-val">${def(ci.j_invariant)}</span></div>
+              <div class="ci-kv"><span class="ci-key">c\u2084</span><span class="ci-val">${def(ci.c4)}</span></div>
+              <div class="ci-kv"><span class="ci-key">c\u2086</span><span class="ci-val">${def(ci.c6)}</span></div>
+              <div class="ci-kv"><span class="ci-key">Primes of bad reduction</span><span class="ci-val">${escHtml(badPrimes)}</span></div>
+            </div>`;
+        }
+
+        if (ci.rank !== undefined) {
+          body += `
+            <div class="ci-section">
+              <div class="ci-sh">Rank &amp; Conductor</div>
+              <div class="ci-kv"><span class="ci-key">Algebraic rank</span><span class="ci-val ci-na">${def(ci.rank)} \u2014 <em>${def(ci.rank_note)}</em></span></div>
+              <div class="ci-kv"><span class="ci-key">Analytic rank</span><span class="ci-val ci-na">${def(ci.analytic_rank)} \u2014 <em>${def(ci.analytic_rank_note)}</em></span></div>
+              <div class="ci-kv"><span class="ci-key">Conductor</span><span class="ci-val ci-na">${def(ci.conductor)} \u2014 <em>${def(ci.conductor_note)}</em></span></div>
+            </div>`;
+        }
+
+        if (ci.lmfdb_ainvs) {
+          body += `
+            <div class="ci-actions">
+              <span class="ci-lmfdb-label">LMFDB a-invariants:</span>
+              <code class="ci-lmfdb-ainv">${def(ci.lmfdb_ainvs)}</code>
+              <a href="https://www.lmfdb.org/EllipticCurve/Q/" class="ci-lmfdb-btn"
+                 target="_blank" rel="noopener noreferrer">Search LMFDB \u2197</a>
+            </div>`;
+        }
+
+        const tr = document.createElement("tr");
+        tr.className = "curve-info-row";
+        tr.innerHTML = `<td colspan="5">
+          <details class="curve-info-card">
+            <summary class="ci-summary">
+              <span class="ci-chevron">\u25b8</span>
+              <span class="ci-label">Curve invariants \u2014 n\u202f=\u202f${escHtml(String(ci.n))}</span>
+              <span class="ci-badge">${def(ci.curve_class)}</span>
+            </summary>
+            <div class="ci-body">${body}</div>
+          </details>
+        </td>`;
+        resultsBody.appendChild(tr);
+        break;
+      }
+
       case "done":
         evtSource.close(); evtSource = null;
         btnSearch.disabled = false;

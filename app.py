@@ -119,6 +119,161 @@ def _integer_divisors(p: int, max_d: int) -> list[int]:
     return sorted([-d for d in divs] + [d for d in divs])
 
 
+def _curve_info(expr, n_val) -> dict:  # noqa: C901
+    """
+    Compute elliptic curve invariants for y² = expr(n=n_val, x).
+
+    Substitutes a concrete n value into the user expression, identifies the
+    degree/genus of the left-hand curve, and — for genus-1 cubics — converts
+    to short Weierstrass form y² = x³ + Ax + B and computes:
+        • Short Weierstrass coefficients A, B
+        • Discriminant  Δ = −16(4A³ + 27B²)
+        • j-invariant   j = 6912A³ / (4A³ + 27B²)
+        • c₄, c₆
+        • Primes of bad reduction (prime divisors of |Δ|, if |Δ| < 10¹²)
+        • LMFDB a-invariants [0,0,0,A,B] when A,B are integers
+
+    All dict values are plain Python strings/lists, safe for JSON serialisation.
+    """
+    from fractions import Fraction  # noqa: PLC0415
+    from sympy import (  # noqa: PLC0415
+        Poly, Rational, Symbol as _Sym, expand as _exp,
+        factorint as _fi, Integer as _Int,
+    )
+
+    info: dict = {}
+    try:
+        # Exact conversion of n_val to SymPy numeric type
+        if isinstance(n_val, int):
+            n_sub = _Int(n_val)
+        elif isinstance(n_val, Fraction):
+            n_sub = Rational(n_val.numerator, n_val.denominator)
+        else:
+            n_sub = Rational(n_val)
+
+        rhs = _exp(expr.subs(n_sym, n_sub))
+
+        # Represent as polynomial in x (fails for rational functions like 1/x)
+        try:
+            poly = Poly(rhs, x_sym, domain="QQ")
+        except Exception:  # noqa: BLE001
+            info["curve_class"] = "Non-polynomial in x (rational function)"
+            return info
+
+        deg = poly.degree()
+        all_c = poly.all_coeffs()  # descending: [a_d, …, a_0]
+
+        if deg < 1:
+            info["curve_class"] = "Constant RHS — degenerate (y² = const)"
+            return info
+        elif deg <= 2:
+            info["curve_class"] = "Conic / parabola (genus 0, not an elliptic curve)"
+            return info
+        elif deg == 3:
+            info["curve_class"] = "Elliptic curve — genus 1"
+        elif deg == 4:
+            info["curve_class"] = "Quartic (genus 1 via birational map to Weierstrass)"
+            return info
+        else:
+            g = (deg - 1) // 2
+            info["curve_class"] = (
+                f"Degree-{deg} hyperelliptic curve (genus {g}; "
+                "Faltings' theorem: finitely many rational points)"
+            )
+            return info
+
+        # ── Cubic: convert to short Weierstrass y² = x³ + Ax + B ───────────
+        while len(all_c) < 4:
+            all_c.insert(0, Rational(0))
+        a3, a2, a1, a0 = [Rational(c) for c in all_c[-4:]]
+
+        # Discriminant of ax³+bx²+cx+d: 18abcd − 4b³d + b²c² − 4ac³ − 27a²d²
+        disc_c = (
+            18 * a3 * a2 * a1 * a0
+            - 4 * a2 ** 3 * a0
+            + a2 ** 2 * a1 ** 2
+            - 4 * a3 * a1 ** 3
+            - 27 * a3 ** 2 * a0 ** 2
+        )
+        if disc_c == 0:
+            info["curve_class"] = "Singular cubic — node or cusp (Δ = 0; not an elliptic curve)"
+            info["discriminant"] = "0"
+            return info
+
+        # Tschirnhaus substitution: x → t − a₂/(3a₃)  (eliminates x² term)
+        t = _Sym("_t_")
+        shift = a2 / (3 * a3)
+        dep = _exp(rhs.subs(x_sym, t - shift))
+        nc = Poly(dep, t, domain="QQ").all_coeffs()
+        while len(nc) < 4:
+            nc.insert(0, Rational(0))
+        lc, _zero, A_p, B_p = [Rational(c) for c in nc[-4:]]
+
+        # Normalise to monic: y² = t³ + (A_p/lc)·t + (B_p/lc)
+        A_w = A_p / lc
+        B_w = B_p / lc
+
+        # Weierstrass invariants
+        S      = 4 * A_w ** 3 + 27 * B_w ** 2   # non-zero since disc_c ≠ 0
+        Delta  = Rational(-16) * S
+        j_inv  = Rational(6912) * A_w ** 3 / S   # = 1728·(4A³)/(4A³+27B²)
+        c4_val = Rational(-48)  * A_w
+        c6_val = Rational(-864) * B_w
+
+        def _fmt(r: Rational) -> str:
+            r = Rational(r)
+            return str(int(r.p)) if r.q == 1 else f"{r.p}/{r.q}"
+
+        info["short_weierstrass"] = f"y\u00b2 = x\u00b3 + ({_fmt(A_w)})\u00b7x + ({_fmt(B_w)})"
+        info["A"]             = _fmt(A_w)
+        info["B"]             = _fmt(B_w)
+        info["discriminant"]  = _fmt(Delta)
+        info["j_invariant"]   = _fmt(j_inv)
+        info["c4"]            = _fmt(c4_val)
+        info["c6"]            = _fmt(c6_val)
+
+        # Primes of bad reduction (factor |Δ_numerator| if not too large)
+        try:
+            dn = abs(int(Rational(Delta).p))
+            if 0 < dn < 10 ** 12:
+                fct = _fi(dn)
+                info["primes_bad_reduction"] = sorted(int(k) for k in fct.keys())
+            elif dn >= 10 ** 12:
+                info["primes_bad_reduction"] = f"|Δ| too large to factor ({dn})"
+            else:
+                info["primes_bad_reduction"] = []
+        except Exception:  # noqa: BLE001
+            pass
+
+        # LMFDB a-invariants  [0, 0, 0, A, B]  when A, B are integers
+        try:
+            Ar = Rational(A_w)
+            Br = Rational(B_w)
+            if Ar.q == 1 and Br.q == 1:
+                info["lmfdb_ainvs"] = f"[0, 0, 0, {int(Ar.p)}, {int(Br.p)}]"
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Rank / conductor — require Sage or PARI-GP; not computable here
+        info["rank"]               = "N/A"
+        info["rank_note"]          = "Requires 2-descent (Sage / PARI-GP)"
+        info["analytic_rank"]      = "N/A"
+        info["analytic_rank_note"] = (
+            "Order of vanishing of L(E, s) at s = 1; "
+            "equals algebraic rank (BSD conjecture, proven for rank 0 and 1)"
+        )
+        info["conductor"]      = "N/A"
+        info["conductor_note"] = (
+            "Product of primes of bad reduction with local exponents "
+            "(Tate's algorithm required)"
+        )
+
+    except Exception as exc:  # noqa: BLE001
+        info["error"] = f"Invariant computation failed: {exc}"
+
+    return info
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -323,6 +478,12 @@ def api_search():
                 if batch_w:
                     n_with_solutions_w.append(n_disp)
                     yield sse({"type": "solutions", "data": batch_w})
+                    try:
+                        ci = _curve_info(expr, n_raw_val)
+                        ci["n"] = n_disp
+                        yield sse({"type": "curve_info", **ci})
+                    except Exception:  # noqa: BLE001
+                        pass
 
                 if idx % report_step_w == 0 or idx == n_count - 1:
                     yield sse({"type": "progress",
@@ -409,6 +570,12 @@ def api_search():
                 if batch_er:
                     n_with_sol_er.append(n_disp)
                     yield sse({"type": "solutions", "data": batch_er})
+                    try:
+                        ci = _curve_info(expr, n_raw_val)
+                        ci["n"] = n_disp
+                        yield sse({"type": "curve_info", **ci})
+                    except Exception:  # noqa: BLE001
+                        pass
 
                 if idx % report_step_er == 0 or idx == n_count - 1:
                     yield sse({"type": "progress",
@@ -488,6 +655,12 @@ def api_search():
                 if batch_d:
                     n_with_sol_d.append(n_disp)
                     yield sse({"type": "solutions", "data": batch_d})
+                    try:
+                        ci = _curve_info(expr, n_raw_val)
+                        ci["n"] = n_disp
+                        yield sse({"type": "curve_info", **ci})
+                    except Exception:  # noqa: BLE001
+                        pass
 
                 if idx % report_step_d == 0 or idx == n_count - 1:
                     yield sse({"type": "progress",
@@ -580,6 +753,12 @@ def api_search():
             if batch:
                 n_with_solutions.append(n_disp)
                 yield sse({"type": "solutions", "data": batch})
+                try:
+                    ci = _curve_info(expr, n_raw[idx][0])
+                    ci["n"] = n_disp
+                    yield sse({"type": "curve_info", **ci})
+                except Exception:  # noqa: BLE001
+                    pass
 
             if idx % report_step == 0 or idx == n_count - 1:
                 yield sse({
