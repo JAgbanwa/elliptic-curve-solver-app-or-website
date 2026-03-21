@@ -44,6 +44,8 @@ def parse_expr(raw: str):
     sympy Expr.  Raises ValueError on invalid or dangerous input.
     """
     raw = raw.strip().replace("^", "**")
+    # Implicit multiplication: 2x → 2*x, 3n → 3*n, 2(x+1) → 2*(x+1)
+    raw = re.sub(r'(\d)([A-Za-z(])', r'\1*\2', raw)
     if len(raw) > 300:
         raise ValueError("Expression too long (max 300 characters).")
     if _FORBIDDEN.search(raw):
@@ -66,6 +68,8 @@ def parse_general_eq(raw: str):
     Allowed symbols: n, x, y.
     """
     raw = raw.strip().replace("^", "**")
+    # Implicit multiplication: 2x → 2*x, 3y → 3*y, 2(x+1) → 2*(x+1)
+    raw = re.sub(r'(\d)([A-Za-z(])', r'\1*\2', raw)
     if len(raw) > 400:
         raise ValueError("Equation too long (max 400 characters).")
     if _FORBIDDEN.search(raw):
@@ -112,6 +116,7 @@ def _eval_center(center_str: str, n_val: int) -> int:
     Returns the result as a Python int.
     """
     center_str = center_str.strip().replace("^", "**")
+    center_str = re.sub(r'(\d)([A-Za-z(])', r'\1*\2', center_str)
     if len(center_str) > 300:
         raise ValueError("Center expression too long.")
     if _FORBIDDEN.search(center_str):
