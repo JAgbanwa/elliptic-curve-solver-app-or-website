@@ -863,6 +863,8 @@ def api_diophantine():  # noqa: C901
     try:
         x_min   = int(request.args.get("x_min",  -50))
         x_max   = int(request.args.get("x_max",   50))
+        y_min   = int(request.args.get("y_min", -100))
+        y_max   = int(request.args.get("y_max",  100))
         n_min   = int(request.args.get("n_min",    0))
         n_max   = int(request.args.get("n_max",    0))
         n_denom = max(1, int(request.args.get("n_denom", 1)))
@@ -888,43 +890,58 @@ def api_diophantine():  # noqa: C901
             yield sse({"type": "error", "message": str(exc)})
             return
 
-        if y_sym not in expr.free_symbols:
-            yield sse({"type": "error",
-                       "message": "The equation must contain y. "
-                                  "(For y\u00b2 = f(n,x) curves, use the main solver.)" })
-            return
+        has_y = y_sym in expr.free_symbols
 
-        # ── Require polynomial in y ──────────────────────────────────────────
+        # ── Choose strategy ──────────────────────────────────────────────────
+        # poly_y  — equation is polynomial in y → numpy.roots() fast path
+        # brute3  — y present but non-polynomial (e.g. x**y=n) → vectorised 3D scan
+        # brute2  — y absent → 2-variable (n, x) scan
         from sympy import Poly, expand as sp_expand  # noqa: PLC0415
-        try:
-            poly_t   = Poly(sp_expand(expr), y_sym, domain="EX")
-            deg_y    = poly_t.degree()
-            if deg_y < 1:
-                raise ValueError("y appears with degree 0.")
-            coeff_syms = poly_t.all_coeffs()   # [c_d(n,x), …, c_0(n,x)]
-        except Exception as exc:  # noqa: BLE001
-            yield sse({"type": "error",
-                       "message": f"Equation must be polynomial in y "
-                                  f"(no y in denominators or under radicals). "
-                                  f"Detail: {exc}"})
-            return
 
-        # Compile coefficient evaluators (floating-point for root-finding)
-        try:
-            coeff_fns_flt = [
-                lambdify((n_sym, x_sym), c, modules=["numpy", "math"])
-                for c in coeff_syms
-            ]
-        except Exception as exc:  # noqa: BLE001
-            yield sse({"type": "error", "message": f"Cannot compile coefficients: {exc}"})
-            return
+        strategy      = "brute2"
+        coeff_syms: list | None    = None
+        coeff_fns_flt: list | None = None
 
-        # Full exact evaluator (Python big-integer, for verification)
+        if has_y:
+            try:
+                poly_t = Poly(sp_expand(expr), y_sym, domain="EX")
+                if poly_t.degree() >= 1:
+                    coeff_syms    = poly_t.all_coeffs()
+                    coeff_fns_flt = [
+                        lambdify((n_sym, x_sym), c, modules=["numpy", "math"])
+                        for c in coeff_syms
+                    ]
+                    strategy = "poly_y"
+            except Exception:  # noqa: BLE001
+                pass
+            if strategy != "poly_y":
+                strategy = "brute3"
+
+        # ── Compile evaluators ───────────────────────────────────────────────
+        # Exact evaluator — uses Python's own arithmetic (integers, Fractions)
         try:
-            f_exact = lambdify((n_sym, x_sym, y_sym), expr, modules=[])
+            if has_y:
+                f_exact = lambdify((n_sym, x_sym, y_sym), expr, modules=[])
+            else:
+                f_exact = lambdify((n_sym, x_sym), expr, modules=[])
         except Exception as exc:  # noqa: BLE001
             yield sse({"type": "error", "message": f"Cannot compile equation: {exc}"})
             return
+
+        # Vectorised float evaluator for brute-force strategies
+        f_vec = None
+        if strategy in ("brute3", "brute2"):
+            try:
+                if has_y:
+                    f_vec = lambdify((n_sym, x_sym, y_sym), expr,
+                                     modules=["numpy", "math"])
+                else:
+                    f_vec = lambdify((n_sym, x_sym), expr,
+                                     modules=["numpy", "math"])
+            except Exception as exc:  # noqa: BLE001
+                yield sse({"type": "error",
+                           "message": f"Cannot compile evaluator: {exc}"})
+                return
 
         # ── Build n values ───────────────────────────────────────────────────
         from fractions import Fraction  # noqa: PLC0415
@@ -941,9 +958,12 @@ def api_diophantine():  # noqa: C901
             fracs.sort()
             n_raw = [(f, str(f)) for f in fracs]
 
-        n_count    = len(n_raw)
-        x_count    = x_max - x_min + 1
-        total_evals = n_count * x_count
+        n_count = len(n_raw)
+        x_count = x_max - x_min + 1
+        y_count = (y_max - y_min + 1) if strategy == "brute3" else 0
+
+        total_evals = n_count * x_count * y_count if strategy == "brute3" \
+            else n_count * x_count
 
         WARN_EVALS = 100_000_000
         if total_evals > WARN_EVALS:
@@ -951,81 +971,191 @@ def api_diophantine():  # noqa: C901
                        "message": f"Large search: {total_evals:,} evaluations. "
                                   "Results stream live \u2014 click Stop any time."})
 
-        yield sse({"type": "start", "n_count": n_count,
-                   "x_count": x_count, "total_evals": total_evals, "x_scale": 0})
+        yield sse({
+            "type":        "start",
+            "n_count":     n_count,
+            "x_count":     x_count,
+            "y_count":     y_count,
+            "total_evals": total_evals,
+            "x_scale":     0,
+            "strategy":    strategy,
+        })
 
-        solutions_found    = 0
+        solutions_found   = 0
         n_with_solutions: list[str] = []
         report_step = max(1, n_count // 200)
 
-        for idx, (n_raw_val, n_disp) in enumerate(n_raw):
-            if skip_zero_n and n_raw_val == 0:
-                continue
-
-            batch: list[dict] = []
-            seen_xy: set      = set()   # deduplicate per (x, y)
-            n_float = float(n_raw_val)
-
-            for x_val in range(x_min, x_max + 1):
-                if skip_zero_x and x_val == 0:
-                    continue
-                x_float = float(x_val)
-
-                try:
-                    # Evaluate all y-polynomial coefficients at this (n, x)
-                    flt_c: list[float] = []
-                    for cf in coeff_fns_flt:
-                        v = cf(n_float, x_float)
-                        flt_c.append(float(v) if np.isscalar(v) else float(np.asarray(v).flat[0]))
-
-                    # Trim leading zeros (handles lower-degree specialisations)
-                    while len(flt_c) > 1 and flt_c[0] == 0.0:
-                        flt_c.pop(0)
-                    if len(flt_c) < 2:
-                        continue   # degenerate: no y dependence at this x
-
-                    # numpy.roots finds ALL roots of the polynomial
-                    approx_roots = np.roots(flt_c)
-
-                    # Collect integer candidates ±1 around each real root
-                    y_cands: set[int] = set()
-                    for r in approx_roots:
-                        if abs(r.imag) < 0.5:
-                            yr = r.real
-                            y_cands.add(math.floor(yr))
-                            y_cands.add(math.ceil(yr))
-
-                except Exception:   # noqa: BLE001
+        # ══════════════════════════════════════════════════════════════════════
+        # STRATEGY: poly_y — polynomial-root fast path (unchanged behaviour)
+        # ══════════════════════════════════════════════════════════════════════
+        if strategy == "poly_y":
+            for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+                if skip_zero_n and n_raw_val == 0:
                     continue
 
-                for y_cand in y_cands:
-                    key = (x_val, y_cand)
-                    if key in seen_xy:
+                batch: list[dict] = []
+                seen_xy: set      = set()
+                n_float = float(n_raw_val)
+
+                for x_val in range(x_min, x_max + 1):
+                    if skip_zero_x and x_val == 0:
                         continue
-                    # Exact integer verification
+                    x_float = float(x_val)
+
                     try:
-                        val = f_exact(n_raw_val, x_val, y_cand)
-                        if isinstance(val, float):
-                            ok = math.isfinite(val) and abs(val) < 0.5
-                        else:
-                            ok = (val == 0)
+                        flt_c: list[float] = []
+                        for cf in coeff_fns_flt:
+                            v = cf(n_float, x_float)
+                            flt_c.append(
+                                float(v) if np.isscalar(v)
+                                else float(np.asarray(v).flat[0])
+                            )
+                        while len(flt_c) > 1 and flt_c[0] == 0.0:
+                            flt_c.pop(0)
+                        if len(flt_c) < 2:
+                            continue
+                        approx_roots = np.roots(flt_c)
+                        y_cands: set[int] = set()
+                        for r in approx_roots:
+                            if abs(r.imag) < 0.5:
+                                yr = r.real
+                                y_cands.add(math.floor(yr))
+                                y_cands.add(math.ceil(yr))
+                    except Exception:  # noqa: BLE001
+                        continue
+
+                    for y_cand in y_cands:
+                        key = (x_val, y_cand)
+                        if key in seen_xy:
+                            continue
+                        try:
+                            val = f_exact(n_raw_val, x_val, y_cand)
+                            ok  = (abs(val) < 0.5) if isinstance(val, float) \
+                                  else (val == 0)
+                            if ok:
+                                seen_xy.add(key)
+                                batch.append({"n": n_disp, "x": str(x_val),
+                                              "y": str(y_cand)})
+                                solutions_found += 1
+                        except Exception:  # noqa: BLE001
+                            pass
+
+                if batch:
+                    n_with_solutions.append(n_disp)
+                    yield sse({"type": "solutions", "data": batch})
+                if idx % report_step == 0 or idx == n_count - 1:
+                    yield sse({"type": "progress",
+                               "pct": round(100 * (idx + 1) / n_count, 1),
+                               "n": n_disp, "solutions": solutions_found})
+
+        # ══════════════════════════════════════════════════════════════════════
+        # STRATEGY: brute3 — vectorised 3D brute-force over (n, x, y)
+        # ══════════════════════════════════════════════════════════════════════
+        elif strategy == "brute3":
+            y_arr_int = np.arange(y_min, y_max + 1, dtype=np.int64)
+            y_arr_flt = y_arr_int.astype(float)
+
+            for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+                if skip_zero_n and n_raw_val == 0:
+                    continue
+
+                batch: list[dict] = []
+                seen_set: set     = set()
+                n_float = float(n_raw_val)
+
+                for x_val in range(x_min, x_max + 1):
+                    if skip_zero_x and x_val == 0:
+                        continue
+                    x_float = float(x_val)
+
+                    # Vectorised scan over the entire y range at once
+                    try:
+                        raw = f_vec(n_float, x_float, y_arr_flt)
+                        vals = np.asarray(raw, dtype=float).ravel()
+                        if vals.size == 1:   # scalar broadcast
+                            vals = np.full(len(y_arr_int), vals[0])
+                        y_cands_list = y_arr_int[
+                            np.isfinite(vals) & (np.abs(vals) < 1.0)
+                        ].tolist()
+                    except Exception:  # noqa: BLE001
+                        y_cands_list = []
+                        for y_vi, y_fi in zip(y_arr_int.tolist(),
+                                              y_arr_flt.tolist()):
+                            try:
+                                v = float(f_vec(n_float, x_float, y_fi))
+                                if math.isfinite(v) and abs(v) < 1.0:
+                                    y_cands_list.append(y_vi)
+                            except Exception:  # noqa: BLE001
+                                pass
+
+                    for y_cand in y_cands_list:
+                        y_cand = int(y_cand)
+                        key = (x_val, y_cand)
+                        if key in seen_set:
+                            continue
+                        ok = False
+                        try:
+                            val = f_exact(n_raw_val, x_val, y_cand)
+                            ok  = (abs(val) < 0.5) if isinstance(val, float) \
+                                  else (val == 0)
+                        except Exception:  # noqa: BLE001
+                            # exact check failed; use tight float threshold
+                            try:
+                                fv = float(f_vec(n_float, x_float, float(y_cand)))
+                                ok = math.isfinite(fv) and abs(fv) < 0.5
+                            except Exception:  # noqa: BLE001
+                                pass
                         if ok:
-                            seen_xy.add(key)
-                            batch.append({"n": n_disp,
-                                          "x": str(x_val),
+                            seen_set.add(key)
+                            batch.append({"n": n_disp, "x": str(x_val),
                                           "y": str(y_cand)})
                             solutions_found += 1
+
+                if batch:
+                    n_with_solutions.append(n_disp)
+                    yield sse({"type": "solutions", "data": batch})
+                if idx % report_step == 0 or idx == n_count - 1:
+                    yield sse({"type": "progress",
+                               "pct": round(100 * (idx + 1) / n_count, 1),
+                               "n": n_disp, "solutions": solutions_found})
+
+        # ══════════════════════════════════════════════════════════════════════
+        # STRATEGY: brute2 — y absent, scan over (n, x) only
+        # ══════════════════════════════════════════════════════════════════════
+        else:
+            for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+                if skip_zero_n and n_raw_val == 0:
+                    continue
+
+                batch: list[dict] = []
+                n_float = float(n_raw_val)
+
+                for x_val in range(x_min, x_max + 1):
+                    if skip_zero_x and x_val == 0:
+                        continue
+                    ok = False
+                    try:
+                        val = f_exact(n_raw_val, x_val)
+                        ok  = (abs(val) < 0.5) if isinstance(val, float) \
+                              else (val == 0)
                     except Exception:  # noqa: BLE001
-                        pass
+                        try:
+                            fv = float(f_vec(n_float, float(x_val)))
+                            ok = math.isfinite(fv) and abs(fv) < 0.5
+                        except Exception:  # noqa: BLE001
+                            pass
+                    if ok:
+                        batch.append({"n": n_disp, "x": str(x_val),
+                                      "y": "\u2014"})
+                        solutions_found += 1
 
-            if batch:
-                n_with_solutions.append(n_disp)
-                yield sse({"type": "solutions", "data": batch})
-
-            if idx % report_step == 0 or idx == n_count - 1:
-                yield sse({"type": "progress",
-                           "pct": round(100 * (idx + 1) / n_count, 1),
-                           "n": n_disp, "solutions": solutions_found})
+                if batch:
+                    n_with_solutions.append(n_disp)
+                    yield sse({"type": "solutions", "data": batch})
+                if idx % report_step == 0 or idx == n_count - 1:
+                    yield sse({"type": "progress",
+                               "pct": round(100 * (idx + 1) / n_count, 1),
+                               "n": n_disp, "solutions": solutions_found})
 
         yield sse({"type": "done", "total_solutions": solutions_found,
                    "n_with_solutions": n_with_solutions})

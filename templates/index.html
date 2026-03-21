@@ -324,7 +324,7 @@
       <section id="gen-inputs" class="param-section" style="display:none">
         <label class="param-label" for="gen-eq-input">
           Full equation &nbsp;—&nbsp;
-          <strong>F(x,&thinsp;y) = 0</strong>
+          <strong>F(n,&thinsp;x,&thinsp;y)</strong>
         </label>
         <input id="gen-eq-input" class="text-input" type="text"
                placeholder="e.g. y**3 - y = x**4 - 2*x - 2"
@@ -347,11 +347,14 @@
           </div>
         </details>
         <p class="hint">
-          Enter as <code>LHS = RHS</code> or as a single expression (= 0).
-          Variables: <code>x</code>, <code>y</code>, and optionally <code>n</code>.
-          Use <code>**</code> for powers, <code>*</code> for multiplication.
-          For each integer x in the range, all integer y are found by solving
-          the polynomial in y — no y-range needed.
+          Enter as <code>LHS = RHS</code> or a single expression (= 0).
+          Variables: <code>n</code>, <code>x</code>, <code>y</code>.
+          Use <code>**</code> for powers, <code>*</code> for multiplication
+          (implicit like <code>2x</code> also works).
+          Strategy is auto-detected:
+          <strong>polynomial root-finding</strong> when polynomial in y (fast, no y-range needed);
+          <strong>3D brute-force</strong> when y is in an exponent or radical (uses y&thinsp;min/max below);
+          <strong>2-variable scan</strong> when y is absent.
         </p>
         <!-- x range for general mode -->
         <div class="range-group" style="margin-top:10px">
@@ -362,6 +365,27 @@
           <div class="range-field">
             <label class="param-label" for="gen-x-max">x&nbsp;max</label>
             <input id="gen-x-max" class="num-input" type="number" value="50" />
+          </div>
+        </div>
+        <!-- y range — used only for non-polynomial-in-y (brute-force 3D) equations -->
+        <div class="range-group" style="margin-top:6px">
+          <div class="range-field">
+            <label class="param-label" for="gen-y-min">
+              y&nbsp;min
+              <span class="tooltip-wrap">
+                <span class="tooltip-icon">?</span>
+                <span class="tooltip-text">
+                  Only used when y appears in an exponent or radical
+                  (e.g.&nbsp;x^y&nbsp;=&nbsp;n). For polynomial equations
+                  all y values are found automatically.
+                </span>
+              </span>
+            </label>
+            <input id="gen-y-min" class="num-input" type="number" value="-100" />
+          </div>
+          <div class="range-field">
+            <label class="param-label" for="gen-y-max">y&nbsp;max</label>
+            <input id="gen-y-max" class="num-input" type="number" value="100" />
           </div>
         </div>
         <p class="hint" style="margin-top:6px">

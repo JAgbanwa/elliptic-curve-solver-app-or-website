@@ -110,29 +110,36 @@ const EXAMPLES = [
     name: "y\u00b2 + y = x\u00b3 \u2212 x  (gen. poly.)",
     solverMode: "gen",
     eq: "y**2 + y = x**3 - x",
-    nm: 0, nx: 0, xm: -20, xx: 20,
-    desc: "y(y+1) = x(x\u00b2\u22121). Solutions: (0,0),(0,\u22121),(1,0),(1,\u22121),(\u22121,0),(\u22121,\u22121),(2,2),(2,\u22123),(\u22122,1),(\u22122,\u22122). Polynomial degree 2 in y — two solutions per x.",
+    nm: 0, nx: 0, xm: -20, xx: 20, ym: -100, yx: 100,
+    desc: "y(y+1) = x(x\u00b2\u22121). Solutions: (0,0),(0,\u22121),(1,0),(1,\u22121),(\u22121,0),(\u22121,\u22121),(2,2),(2,\u22123),(\u22122,1),(\u22122,\u22122). Polynomial degree 2 in y \u2014 two solutions per x.",
   },
   {
     name: "Pythagorean triples: x\u00b2 + y\u00b2 = n\u00b2",
     solverMode: "gen",
     eq: "x**2 + y**2 = n**2",
-    nm: 1, nx: 30, xm: 0, xx: 30,
+    nm: 1, nx: 30, xm: 0, xx: 30, ym: -100, yx: 100,
     desc: "All Pythagorean triples with legs up to 30. Finds (3,4,5), (5,12,13), (8,15,17), (20,21,29), etc. n is the hypotenuse; x,y are the legs.",
   },
   {
     name: "Sum of two cubes: x\u00b3 + y\u00b3 = n",
     solverMode: "gen",
     eq: "x**3 + y**3 = n",
-    nm: 1, nx: 2000, xm: -15, xx: 15,
+    nm: 1, nx: 2000, xm: -15, xx: 15, ym: -100, yx: 100,
     desc: "Which n are a sum of two integer cubes? Finds n=1729=12\u00b3+1\u00b3=10\u00b3+9\u00b3 (Hardy\u2013Ramanujan taxi-cab), n=1=1+0, n=2=1+1, n=9=2+1, etc.",
   },
   {
     name: "y\u00b3 \u2212 y = x\u2074 \u2212 2x \u2212 2",
     solverMode: "gen",
     eq: "y**3 - y = x**4 - 2*x - 2",
-    nm: 0, nx: 0, xm: -100, xx: 100,
+    nm: 0, nx: 0, xm: -100, xx: 100, ym: -100, yx: 100,
     desc: "The equation from the user request. Degree 3 in y, degree 4 in x. For each x, numpy solves y\u00b3\u2212y\u2212(x\u2074\u22122x\u22122) = 0 exactly. Widen x range if no solutions found here.",
+  },
+  {
+    name: "Perfect powers: x^y = n  (3D brute-force)",
+    solverMode: "gen",
+    eq: "x**y = n",
+    nm: 1, nx: 1024, nd: 1, xm: 2, xx: 32, ym: 1, yx: 10,
+    desc: "Find all (n, x, y) with x^y = n. y appears in the exponent \u2014 not polynomial in y \u2014 so the solver uses 3D brute-force. Discovers all perfect squares, cubes, 4th-powers, etc. up to 1024.",
   },
 ];
 
@@ -189,6 +196,8 @@ const genEqIn        = document.getElementById("gen-eq-input");
 const genEqPreview   = document.getElementById("gen-eq-preview");
 const genXMinIn      = document.getElementById("gen-x-min");
 const genXMaxIn      = document.getElementById("gen-x-max");
+const genYMinIn      = document.getElementById("gen-y-min");
+const genYMaxIn      = document.getElementById("gen-y-max");
 const thVerify       = document.getElementById("th-verify");
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -453,6 +462,21 @@ function startSearch() {
             + ` — ${msg.total_evals.toLocaleString()} evaluations…`,
             "status-running",
           );
+        } else if (msg.strategy === "brute3") {
+          setStatus(
+            `3D brute-force: ${msg.n_count.toLocaleString()} n × `
+            + `${msg.x_count.toLocaleString()} x × `
+            + `${msg.y_count.toLocaleString()} y`
+            + ` = ${msg.total_evals.toLocaleString()} evaluations…`,
+            "status-running",
+          );
+        } else if (msg.strategy === "brute2") {
+          setStatus(
+            `2-variable scan: ${msg.n_count.toLocaleString()} n × `
+            + `${msg.x_count.toLocaleString()} x`
+            + ` = ${msg.total_evals.toLocaleString()} evaluations…`,
+            "status-running",
+          );
         } else {
           setStatus(
             `Searching ${msg.n_count.toLocaleString()} n-values × `
@@ -667,6 +691,8 @@ function buildDiophURL() {
     eq:      genEqIn.value.trim(),
     x_min:   genXMinIn.value,
     x_max:   genXMaxIn.value,
+    y_min:   genYMinIn.value,
+    y_max:   genYMaxIn.value,
     n_min:   nMinIn.value,
     n_max:   nMaxIn.value,
     n_denom: nDenomIn.value,
@@ -731,6 +757,8 @@ EXAMPLES.forEach((ex) => {
       nDenomIn.value  = ex.nd ?? 1;
       genXMinIn.value = ex.xm ?? -50;
       genXMaxIn.value = ex.xx ?? 50;
+      genYMinIn.value = ex.ym ?? -100;
+      genYMaxIn.value = ex.yx ?? 100;
       skipZeroNChk.checked = !!ex.skipZeroN;
       skipZeroXChk.checked = !!ex.skipZeroX;
       renderGenPreview(ex.eq || "");
