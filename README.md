@@ -1,26 +1,44 @@
-# Elliptic Curve Integer Point Finder
+# Elliptic Curve & Diophantine Equation Solver
 
-A Flask web app that searches for integer points on parametric elliptic curve
-families **y² = f(n, x)**, streaming results live to the browser.  
+A Flask web app for finding integer solutions to polynomial Diophantine equations.
+Supports the classical **y² = f(n, x)** elliptic-curve family mode **and** a
+fully general **F(x, y, n) = 0** mode for arbitrary polynomial equations
+like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.  
 **[Live demo →](https://elliptic-curve-solver.onrender.com)**
 
 ---
 
 ## Features
 
-- **Arbitrary curve families** — enter any expression `f(n, x)` in Python syntax  
-- **LaTeX import** — paste a LaTeX equation and convert it to the required Python expression automatically  
-- **Rational n support** — set a denominator to scan fractions like ½, ⅓, ⅙, …  
-- **Big-integer n** — n-min / n-max accept arbitrarily large integers (23+ digits)  
-- **Three x-scan modes** — fixed range, auto-scale (range grows with |n|), or centered window around a symbolic expression  
-- **Skip-zeros filters** — exclude n = 0 and/or x = 0 from results with a single checkbox  
-- **N Summary panel** — after search, instantly see which rational n-values yielded integral points  
-- **Live streaming** — results appear in real time via Server-Sent Events (SSE)  
-- **NumPy-vectorised backend** — the entire x range is evaluated in a single NumPy call per n  
-- **LaTeX preview** — the curve is rendered with KaTeX as you type  
-- **Table grouped by n** — solutions are visually grouped under their n-header row  
-- **CSV export** — download all discovered integer points  
-- **10 built-in examples** — including the congruent number curve, Hardy–Ramanujan 1729, and Weierstrass families  
+### Two solver modes
+
+| Mode | Equation form | How y is found |
+|------|--------------|---------------|
+| **y² = f(n, x)** | `f(n, x)` entered as RHS only | `math.isqrt()` perfect-square check — exact, works for 30+ digit numbers |
+| **General Diophantine** | Full equation `LHS = RHS` or `F = 0` | `numpy.roots()` finds all roots of the y-polynomial, then exact integer verification |
+
+### Core capabilities
+
+- **Arbitrary equations** — any polynomial in `x`, `y` (and optional parameter `n`)
+- **LaTeX import** — paste LaTeX, auto-converted to Python syntax
+- **Rational n** — set a denominator to scan fractions ½, ⅓, ⅙, …
+- **Big-integer arithmetic** — n and x up to 10⁵⁰ and beyond, no float precision loss
+- **5 x-scan modes** (y² = f mode):
+  - Fixed range
+  - Auto-scale (x range grows with |n|)
+  - Smart window — center expression + half-width, exact big-integer
+  - Divisor search — tests only x values that divide P(n) exactly
+  - Expression range + step — scan `[f(n), g(n)]` with step `h(n)`, all exact big-int
+- **Curve invariants panel** — for every n with solutions, auto-computes:
+  - Short Weierstrass form `y² = x³ + Ax + B`
+  - Discriminant Δ, j-invariant, c₄, c₆
+  - Primes of bad reduction
+  - Algebraic & analytic rank (N/A with explanation), conductor, LMFDB a-invariants
+- **N Summary panel** — see all n-values with integral points at a glance
+- **Live streaming** via Server-Sent Events (SSE)
+- **Table grouped by n** with collapsible invariant cards
+- **CSV export**
+- **17 built-in examples** spanning both solver modes
 
 ---
 
@@ -38,35 +56,46 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Then open **http://localhost:5001** in your browser.
+Open **http://localhost:5001**.
 
 ---
 
 ## Deploy to Render
 
-The repo ships with a `Procfile` and `render.yaml` so you can deploy in minutes:
+The repo ships `Procfile` and `render.yaml` for one-click deployment:
 
-1. Sign in to [render.com](https://render.com) with your GitHub account  
-2. **New +** → **Web Service** → connect this repository  
-3. Render auto-detects `render.yaml` — confirm the settings and click **Create Web Service**  
-4. After the ~3 min build your app is live at `https://<your-service>.onrender.com`
+1. Sign in to [render.com](https://render.com) with your GitHub account
+2. **New +** → **Web Service** → connect this repository
+3. Render reads `render.yaml` automatically — confirm and click **Create Web Service**
+4. ~3 min build → live at `https://<your-service>.onrender.com`
 
-> **Note:** the free tier spins down after 15 min of inactivity (cold-start ~30 s).  
-> Upgrade to the Starter plan ($7/month) for an always-on instance.
+> The free tier spins down after 15 min of inactivity (cold-start ~30 s).  
+> Upgrade to Starter ($7/month) for always-on.
 
 ---
 
 ## How It Works
 
-| Step | What happens |
-|------|-------------|
-| **Parse** | SymPy parses `f(n, x)` and compiles it to a fast NumPy-vectorised function via `lambdify` |
-| **Scan** | For each rational `n` in `[n_min, n_max]` (step `1/n_denom`), all integers `x` in the selected range are evaluated **in one NumPy call** |
-| **Check** | RHS values are filtered for non-negative integers; integer square-roots are computed in bulk |
-| **Summarise** | After the search, a dedicated panel lists every rational `n` that had at least one integral point |
-| **Stream** | Solutions and progress are streamed back to the browser as JSON Server-Sent Events |
+### y² = f(n, x) mode
 
-A soft warning is shown when a search exceeds 100 million evaluations; no hard cap is enforced.
+| Step | Detail |
+|------|--------|
+| Parse | SymPy `sympify` → `lambdify(..., modules=["numpy","math"])` |
+| Scan | Fixed/autoscale: vectorised NumPy over entire x range per n |
+| Scan | Window/exprrange/divisor: exact Python big-integer `while` loop |
+| Check | `math.isqrt(rhs)² == rhs` — exact perfect-square test |
+| Invariants | Tschirnhaus substitution → short Weierstrass → Δ, j, c₄, c₆, bad primes |
+| Stream | JSON SSE events: `start → solutions → curve_info → progress → done` |
+
+### General Diophantine mode (`F(x, y, n) = 0`)
+
+| Step | Detail |
+|------|--------|
+| Parse | `parse_general_eq` splits on `=`, forms `LHS − RHS`, validates symbols |
+| Coefficient extraction | SymPy `Poly(F, y)` gives `[c_d(n,x), …, c_0(n,x)]` |
+| Root-finding | `numpy.roots(coeffs_at_x)` → all complex roots of the y-polynomial |
+| Candidate generation | Round each real root to `⌊r⌋` and `⌈r⌉` |
+| Exact verification | `F(n, x, y_cand) == 0` using Python arbitrary-precision integers |
 
 ---
 
@@ -74,41 +103,48 @@ A soft warning is shown when a search exceeds 100 million evaluations; no hard c
 
 ```
 .
-├── app.py                   # Flask backend + SSE search endpoint + LaTeX converter
-├── Procfile                 # gunicorn start command for Render / Heroku
+├── app.py                   # Flask backend — /api/search, /api/diophantine, /api/latex, /api/from_latex
+├── Procfile                 # gunicorn command for Render / Heroku
 ├── render.yaml              # Render deployment config
 ├── requirements.txt
 ├── templates/
-│   └── index.html           # Single-page UI
+│   └── index.html           # Single-page UI (two solver modes, KaTeX, hero section)
 └── static/
-    ├── css/
-    │   └── main.css
-    └── js/
-        └── main.js
+    ├── css/main.css
+    └── js/main.js
 ```
 
 ---
 
-## Example Curves
+## Example Curves & Equations
+
+### y² = f(n, x) examples
 
 | Name | Expression | Notes |
 |------|-----------|-------|
 | Congruent number curve | `x**3 - n**2*x` | Integer points ↔ n is a congruent number |
 | Weierstrass y²=x³+n | `x**3 + n` | Classic constant-shift family |
-| y²=x³−x+n | `x**3 - x + n` | Linear shift |
-| y²=x³−n³ | `x**3 - n**3` | Fermat-adjacent |
-| Torsion only | `x**3 - x` | Fixed curve; torsion points (−1, 0), (0, 0), (1, 0) |
-| Hardy–Ramanujan 1729 | `x**3 + n**3` | Taxicab number family |
-| Weierstrass large-coeff | `x**3 - 27*n**4*x + 54*n**6` | Large-coefficient family |
-| General Weierstrass | `(36*n + 27)**2` family | Parameterised by 6n+... |
+| Hardy–Ramanujan 1729 | `x**3 - 1729*n**3` | Smart window centred on ∛(1729n³) |
+| Divisor mode | `(6n+3+x)² + P(n)/x` | Solution: n=77, x=97, y=±699 |
+| Large-solution demo | `x**3 + (x-n)**2` | Expression range finds y=10¹⁵ in seconds |
+
+### General Diophantine examples
+
+| Equation | Notes |
+|----------|-------|
+| `y**2 + y = x**3 - x` | 8 solutions in x ∈ [−5, 5] |
+| `x**2 + y**2 = n**2` | Pythagorean triples — n is the hypotenuse |
+| `x**3 + y**3 = n` | Sum-of-two-cubes; finds 1729 = 12³+1³ = 10³+9³ |
+| `y**3 - y = x**4 - 2*x - 2` | Degree-4 in x, degree-3 in y |
 
 ---
 
 ## Security
 
-- Expression parsing is done through SymPy's `sympify` with an explicit allow-list of symbols (`n`, `x`)  
-- A regex blocklist rejects any use of `import`, `eval`, `exec`, `os`, `sys`, etc.  
-- The LaTeX converter validates that only `n` and `x` appear in the parsed expression before returning it  
-- Production server runs gunicorn with `debug=False`; the `PORT` is read from the environment  
+- SymPy `sympify` with explicit symbol allow-list (`n`, `x`, `y`)
+- Regex blocklist rejects `import`, `eval`, `exec`, `os`, `sys`, `__builtins__`, etc.
+- LaTeX converter validates parsed symbols before returning Python expression
+- `_eval_center` uses a sandboxed `eval` with `{"__builtins__": {}}` plus only `abs`, `round`, `int`, `icbrt`
+- Production: gunicorn, `debug=False`, `PORT` from environment
 
 ---
