@@ -332,6 +332,20 @@
         <div class="preview-box" id="gen-eq-preview">
           <span class="dim">LaTeX preview loads here…</span>
         </div>
+        <!-- LaTeX import panel for general mode -->
+        <details class="latex-import" id="gen-latex-import">
+          <summary class="latex-import-toggle">&#x2328; Paste LaTeX equation</summary>
+          <div class="latex-import-body">
+            <label class="param-label" for="gen-latex-paste-input">Paste your LaTeX here</label>
+            <textarea id="gen-latex-paste-input" class="latex-textarea"
+                      rows="3" spellcheck="false"
+                      placeholder="e.g. y^3 - y = x^4 - 2x - 2"></textarea>
+            <div class="latex-import-row">
+              <button id="btn-convert-latex-gen" class="btn btn-ghost" type="button">&#10003; Convert to Python</button>
+              <span id="gen-latex-convert-status" class="latex-convert-status"></span>
+            </div>
+          </div>
+        </details>
         <p class="hint">
           Enter as <code>LHS = RHS</code> or as a single expression (= 0).
           Variables: <code>x</code>, <code>y</code>, and optionally <code>n</code>.

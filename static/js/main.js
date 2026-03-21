@@ -276,6 +276,43 @@ btnConvertLatex.addEventListener("click", async () => {
   }
 });
 
+/* General Diophantine "Paste LaTeX equation → Convert to Python" */
+const btnConvertLatexGen    = document.getElementById("btn-convert-latex-gen");
+const genLatexPasteInput    = document.getElementById("gen-latex-paste-input");
+const genLatexConvertStatus = document.getElementById("gen-latex-convert-status");
+
+btnConvertLatexGen.addEventListener("click", async () => {
+  const raw = genLatexPasteInput.value.trim();
+  if (!raw) {
+    genLatexConvertStatus.textContent = "Paste a LaTeX equation first.";
+    genLatexConvertStatus.className = "latex-convert-status error";
+    return;
+  }
+  genLatexConvertStatus.textContent = "Converting…";
+  genLatexConvertStatus.className = "latex-convert-status";
+  try {
+    const resp = await fetch("/api/from_latex", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ latex: raw, mode: "gen" }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      genEqIn.value = data.eq;
+      genLatexConvertStatus.textContent = "✓ Loaded into equation field!";
+      genLatexConvertStatus.className = "latex-convert-status ok";
+      renderGenPreview(data.eq);
+      document.getElementById("gen-latex-import").open = false;
+    } else {
+      genLatexConvertStatus.textContent = "Error: " + data.error;
+      genLatexConvertStatus.className = "latex-convert-status error";
+    }
+  } catch (_) {
+    genLatexConvertStatus.textContent = "Request failed — is the server running?";
+    genLatexConvertStatus.className = "latex-convert-status error";
+  }
+});
+
 /* ═══════════════════════════════════════════════════════════════════════════
    N SUMMARY
    ═══════════════════════════════════════════════════════════════════════════ */

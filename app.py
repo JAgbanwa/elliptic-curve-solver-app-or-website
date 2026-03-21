@@ -325,12 +325,51 @@ def api_latex():
 
 @app.route("/api/from_latex", methods=["POST"])
 def api_from_latex():
-    """Convert a LaTeX equation (or RHS expression) to a Python-syntax expression."""
+    """Convert a LaTeX equation (or RHS expression) to a Python-syntax expression.
+
+    When mode == "gen", accepts a full equation with y (e.g. y^3 - y = x^4 - 2x - 2)
+    and returns both sides as a Python equation string suitable for the general
+    Diophantine solver.
+    """
     data = request.get_json(silent=True) or {}
     latex_raw = data.get("latex", "").strip()
+    mode = data.get("mode", "ec")          # "ec" (default) or "gen"
     if not latex_raw:
         return {"ok": False, "error": "No LaTeX provided."}
 
+    try:
+        from sympy.parsing.latex import parse_latex  # noqa: PLC0415
+    except ImportError:
+        return {"ok": False, "error": "LaTeX parsing requires antlr4-python3-runtime==4.11 (pip install antlr4-python3-runtime==4.11)."}
+
+    from sympy import expand as _expand, collect as _collect  # noqa: PLC0415
+
+    # ── General Diophantine mode: parse a full "LHS = RHS" LaTeX equation ──
+    if mode == "gen":
+        allowed = {n_sym, x_sym, y_sym}
+        # Split on the first bare '=' that is not part of \leq, \geq, \neq etc.
+        parts = re.split(r'(?<!\\)=', latex_raw, maxsplit=1)
+        if len(parts) == 2:
+            lhs_latex, rhs_latex = parts[0].strip(), parts[1].strip()
+        else:
+            lhs_latex, rhs_latex = latex_raw.strip(), "0"
+        try:
+            lhs_sym = parse_latex(lhs_latex) if lhs_latex else sympify("0")
+            rhs_sym = parse_latex(rhs_latex) if rhs_latex else sympify("0")
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"Cannot parse LaTeX: {exc}"}
+        unknown = (lhs_sym.free_symbols | rhs_sym.free_symbols) - allowed
+        if unknown:
+            return {"ok": False, "error": f"Unknown symbol(s): {', '.join(str(s) for s in unknown)}. Only x, y, n are allowed."}
+        try:
+            lhs_py = str(_collect(_expand(lhs_sym), [y_sym, x_sym]))
+            rhs_py = str(_collect(_expand(rhs_sym), [y_sym, x_sym]))
+        except Exception:  # noqa: BLE001
+            lhs_py, rhs_py = str(lhs_sym), str(rhs_sym)
+        eq_str = f"{lhs_py} = {rhs_py}"
+        return {"ok": True, "eq": eq_str}
+
+    # ── EC mode: parse the RHS of y² = f(n, x) ──────────────────────────
     # Strip leading  y^2 =  /  y² =  /  y^{2} =  so users can paste whole equations
     cleaned = re.sub(
         r'^\s*y\s*(?:\^\{?2\}?|²|\*\*2)\s*=\s*', '', latex_raw, flags=re.IGNORECASE
@@ -339,22 +378,17 @@ def api_from_latex():
         return {"ok": False, "error": "Expression is empty after stripping y² = prefix."}
 
     try:
-        from sympy.parsing.latex import parse_latex  # noqa: PLC0415
         sym_expr = parse_latex(cleaned)
-    except ImportError:
-        return {"ok": False, "error": "LaTeX parsing requires antlr4-python3-runtime==4.11 (pip install antlr4-python3-runtime==4.11)."}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": f"Cannot parse LaTeX: {exc}"}
 
     # Validate: only n and x symbols allowed
-    from sympy import symbols as _syms, expand as _expand, collect as _collect  # noqa: PLC0415
     allowed = {n_sym, x_sym}
     unknown = sym_expr.free_symbols - allowed
     if unknown:
         return {"ok": False, "error": f"Unknown symbol(s) in LaTeX: {', '.join(str(s) for s in unknown)}. Only n and x are allowed."}
 
     # Produce a clean, human-readable Python expression: expand then collect by x
-    # so coefficients are grouped by x power (x**3 + A*x**2 + B*x + C form)
     try:
         clean_expr = _collect(_expand(sym_expr), x_sym)
         python_expr = str(clean_expr)
