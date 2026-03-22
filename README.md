@@ -39,9 +39,9 @@ like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.
 - **N Summary panel** — see all n-values with integral points at a glance
 - **Live streaming** via Server-Sent Events (SSE)
 - **Table grouped by n** with collapsible invariant cards
-- **CSV & PDF export** — download results as a spreadsheet or print to PDF
+- **CSV, PDF & LaTeX export** — download results as a spreadsheet, print to PDF, or export a ready-to-compile `.tex` file with full search-parameter metadata (bounds, compute time, strategy, exhaustiveness statement)
 - **Light / Dark mode** — toggle in the header; remembers your preference via localStorage
-- **18 built-in examples** spanning both solver modes
+- **21 built-in examples** spanning both solver modes — click any card to instantly load and run the search
 
 ---
 
