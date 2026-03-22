@@ -245,6 +245,7 @@ if (btnThemeToggle) {
     document.documentElement.setAttribute("data-theme", next);
     localStorage.setItem("theme", next);
     _applyThemeBtn(next);
+    if (plotData) renderPlot();
   });
 }
 
@@ -258,7 +259,9 @@ let nTotalCount = 0;      // total n-values in last search (for n-summary)
 let lastGroupN  = null;   // n-value of the current table group header
 let currentSolverMode = "ec";  // "ec" | "gen"
 let ecVarMode  = "3var";       // "2var" | "3var"  — for y² = f mode
-let genVarMode = "3var";       // "2var" | "3var"  — for General Diophantine// Search metadata — captured at search start, used by PDF/LaTeX export
+let genVarMode = "3var";       // "2var" | "3var"  — for General Diophantine
+let plotData    = null;   // last successful /api/plot response
+// Search metadata — captured at search start, used by PDF/LaTeX export
 let searchMeta = {};      // snapshot of search parameters
 /* ═══════════════════════════════════════════════════════════════════════════
    LATEX PREVIEW
@@ -418,6 +421,9 @@ function clearResults() {
   if (ns) ns.style.display = "none";
   const wb = document.getElementById("search-warning");
   if (wb) { wb.style.display = "none"; wb.textContent = ""; }
+  plotData = null;
+  const ps = document.getElementById("plot-section");
+  if (ps) ps.style.display = "none";
 }
 
 function addRows(batch) {
@@ -686,6 +692,7 @@ function startSearch() {
         }
         progressStats.textContent =
           `Complete — ${msg.total_solutions} total solution${msg.total_solutions !== 1 ? "s" : ""}.`;
+        setTimeout(loadPlot, 80);
         break;
 
       case "error":
@@ -841,10 +848,247 @@ function buildDiophURL() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   CURVE VISUALIZATION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Fetch plot data from /api/plot and render the canvas chart.
+ * Called 80 ms after a search completes (to allow the DOM to settle).
+ */
+async function loadPlot() {
+  const isGen = currentSolverMode === "gen";
+
+  // Choose n value for the curve: first solution's n, or midpoint of n range
+  let plotN;
+  if (allSolutions.length > 0) {
+    plotN = String(allSolutions[0].n);
+  } else {
+    const nm = parseFloat(searchMeta.nMin || "0");
+    const nx = parseFloat(searchMeta.nMax || "0");
+    plotN = String(Math.round((nm + nx) / 2));
+  }
+
+  // Compute x plot range from search params, then expand to include solutions
+  let xMin, xMax;
+  if (isGen) {
+    xMin = parseFloat(genXMinIn.value) || -50;
+    xMax = parseFloat(genXMaxIn.value) ||  50;
+  } else {
+    const mode = xModeSelect.value;
+    if (mode === "fixed") {
+      xMin = parseFloat(xMinIn.value) || -100;
+      xMax = parseFloat(xMaxIn.value) ||  100;
+    } else {
+      xMin = -100; xMax = 100;
+    }
+  }
+
+  // Expand range to fully contain all found solution x values
+  const solXs = allSolutions.map(s => parseFloat(s.x)).filter(Number.isFinite);
+  if (solXs.length) {
+    const lo = Math.min(...solXs), hi = Math.max(...solXs);
+    const pad = Math.max(5, (hi - lo) * 0.15);
+    xMin = Math.min(xMin, lo - pad);
+    xMax = Math.max(xMax, hi + pad);
+  }
+
+  // Clamp to a sensible plotting span
+  const span = xMax - xMin;
+  if (span > 4000) {
+    const cx = (xMin + xMax) / 2;
+    xMin = cx - 200; xMax = cx + 200;
+  }
+
+  // Solutions for the chosen n value only (so points lie on the drawn curve)
+  const solsForN = allSolutions
+    .filter(s => String(s.n) === plotN)
+    .map(s => ({ x: s.x, y: s.y }));
+
+  const body = { mode: isGen ? "gen" : "ec", n_val: plotN,
+                 x_min: xMin, x_max: xMax, solutions: solsForN };
+  if (isGen) { body.eq   = genEqIn.value.trim(); }
+  else        { body.expr = exprInput.value.trim(); }
+
+  try {
+    const resp = await fetch("/api/plot", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      plotData = data;
+      searchMeta.pgfplots = data.pgfplots;
+      searchMeta.eqLatex  = data.eq_latex;
+      const sec = document.getElementById("plot-section");
+      if (sec) sec.style.display = "";
+      const lbl = document.getElementById("plot-n-label");
+      if (lbl) lbl.textContent = `n\u202f=\u202f${plotN}`;
+      renderPlot();
+    }
+  } catch (_) {
+    // Visualization is optional — silent failure
+  }
+}
+
+/** Draw the curve + integer points on the canvas using the 2D API. */
+function renderPlot() {
+  if (!plotData) return;
+  const canvas = document.getElementById("curve-canvas");
+  if (!canvas) return;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const container = canvas.parentElement;
+  const W = Math.max(300, Math.min((container ? container.clientWidth - 24 : 700), 860));
+  const H = Math.round(W * 0.5);   // 2:1 aspect
+
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + "px";
+  canvas.style.height = H + "px";
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  const PAD_L = 54, PAD_R = 20, PAD_T = 24, PAD_B = 38;
+  const PW = W - PAD_L - PAD_R;
+  const PH = H - PAD_T - PAD_B;
+
+  const { pos_segments, neg_segments, sol_points,
+          x_min, x_max, y_min, y_max } = plotData;
+
+  const isDark = document.documentElement.getAttribute("data-theme") !== "light";
+  const tx = x => PAD_L + (x - x_min) / (x_max - x_min) * PW;
+  const ty = y => PAD_T + (1 - (y - y_min) / (y_max - y_min)) * PH;
+
+  // Background
+  ctx.fillStyle = isDark ? "#161b22" : "#ffffff";
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid lines
+  ctx.strokeStyle = isDark ? "#21262d" : "#e5e7eb";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  const NX = 8, NY = 6;
+  for (let i = 0; i <= NX; i++) {
+    const gx = PAD_L + (i / NX) * PW;
+    ctx.beginPath(); ctx.moveTo(gx, PAD_T); ctx.lineTo(gx, PAD_T + PH); ctx.stroke();
+  }
+  for (let i = 0; i <= NY; i++) {
+    const gy = PAD_T + (i / NY) * PH;
+    ctx.beginPath(); ctx.moveTo(PAD_L, gy); ctx.lineTo(PAD_L + PW, gy); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Axis lines through origin
+  ctx.strokeStyle = isDark ? "#8b949e" : "#9ca3af";
+  ctx.lineWidth = 1.2;
+  if (x_min <= 0 && 0 <= x_max) {
+    const ax = tx(0);
+    ctx.beginPath(); ctx.moveTo(ax, PAD_T); ctx.lineTo(ax, PAD_T + PH); ctx.stroke();
+  }
+  if (y_min <= 0 && 0 <= y_max) {
+    const ay = ty(0);
+    ctx.beginPath(); ctx.moveTo(PAD_L, ay); ctx.lineTo(PAD_L + PW, ay); ctx.stroke();
+  }
+
+  // Axis tick labels
+  ctx.fillStyle = isDark ? "#8b949e" : "#6b7280";
+  ctx.font = "11px sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let i = 0; i <= NX; i += 2) {
+    const gx  = PAD_L + (i / NX) * PW;
+    const val = x_min + (i / NX) * (x_max - x_min);
+    ctx.fillText(_fmtNum(val), gx, PAD_T + PH + 5);
+  }
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let i = 0; i <= NY; i += 2) {
+    const gy  = PAD_T + (i / NY) * PH;
+    const val = y_max - (i / NY) * (y_max - y_min);
+    ctx.fillText(_fmtNum(val), PAD_L - 5, gy);
+  }
+
+  // Axis labels
+  ctx.fillStyle = isDark ? "#8b949e" : "#6b7280";
+  ctx.font = "bold 11px sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText("x", PAD_L + PW + 10, PAD_T + PH / 2 - 6);
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillText("y", PAD_L + 4, PAD_T - 10);
+
+  // Curve segments
+  const curveColor = isDark ? "#60a5fa" : "#2563eb";
+  ctx.strokeStyle = curveColor;
+  ctx.lineWidth   = 2;
+  ctx.lineJoin    = "round";
+
+  const drawSeg = seg => {
+    if (seg.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(tx(seg[0][0]), ty(seg[0][1]));
+    for (let i = 1; i < seg.length; i++) ctx.lineTo(tx(seg[i][0]), ty(seg[i][1]));
+    ctx.stroke();
+  };
+  for (const seg of pos_segments) drawSeg(seg);
+  for (const seg of neg_segments) drawSeg(seg);
+
+  // Integer solution points
+  ctx.fillStyle   = "#ef4444";
+  ctx.strokeStyle = isDark ? "#161b22" : "#ffffff";
+  ctx.lineWidth   = 1.5;
+  for (const [sx, sy] of sol_points) {
+    const cx = tx(sx), cy_ = ty(sy);
+    ctx.beginPath(); ctx.arc(cx, cy_, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+
+  // Plot border
+  ctx.strokeStyle = isDark ? "#30363d" : "#d1d5db";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(PAD_L, PAD_T, PW, PH);
+
+  // Caption
+  const cap = document.getElementById("plot-caption");
+  if (cap) {
+    cap.textContent =
+      `Curve for n\u202f=\u202f${plotData.n_val}\u2002|\u2002`
+      + `${sol_points.length} integer point${sol_points.length !== 1 ? "s" : ""} highlighted`
+      + (sol_points.length < allSolutions.length
+          ? ` (${allSolutions.length} total across all n)`
+          : "");
+  }
+}
+
+function _fmtNum(v) {
+  if (!Number.isFinite(v)) return "";
+  const a = Math.abs(v);
+  if (a >= 10000)  return v.toExponential(1);
+  if (a >= 100)    return Math.round(v).toString();
+  if (Number.isInteger(v)) return v.toString();
+  return v.toFixed(1);
+}
+
+// Toggle plot visibility
+if (btnTogglePlot) {
+  btnTogglePlot.addEventListener("click", () => {
+    const pc = document.getElementById("plot-container");
+    if (!pc) return;
+    const hidden = pc.style.display === "none";
+    pc.style.display = hidden ? "" : "none";
+    btnTogglePlot.textContent = hidden ? "Hide plot" : "Show plot";
+    if (hidden && plotData) renderPlot();
+  });
+}
+
+// Re-render on window resize
+window.addEventListener("resize", () => { if (plotData) renderPlot(); });
+
+/* ═══════════════════════════════════════════════════════════════════════════
    EXPORT  (CSV + PDF + LaTeX)
    ═══════════════════════════════════════════════════════════════════════════ */
 const btnExportPdf   = document.getElementById("btn-export-pdf");
-const btnExportLatex = document.getElementById("btn-export-latex");
+const btnExportLatex  = document.getElementById("btn-export-latex");
+const btnTogglePlot   = document.getElementById("btn-toggle-plot");
+const curveCanvas     = document.getElementById("curve-canvas");
 
 function buildExportMeta() {
   const isGen = currentSolverMode === "gen";
@@ -1033,6 +1277,15 @@ btnExportPdf.addEventListener("click", () => {
     boundsLines.map(l => `<li>${escHtml(l)}</li>`).join("") +
     `</ul></div>`;
 
+  // Include curve plot image if visible
+  const _canvas = document.getElementById("curve-canvas");
+  const _plotSec = document.getElementById("plot-section");
+  if (_canvas && plotData && _plotSec && _plotSec.style.display !== "none") {
+    const _imgData = _canvas.toDataURL("image/png");
+    hdr.innerHTML +=
+      '<div class="ph-plot"><strong>Curve Visualization</strong>'
+      + '<br/><img class="ph-plot-img" src="' + _imgData + '"/></div>';
+  }
   window.print();
 });
 
@@ -1060,7 +1313,8 @@ btnExportLatex.addEventListener("click", () => {
   const tex = `% Elliptic Curve Solver — Integer Points Report
 % Generated: ${date}
 \\documentclass[12pt,a4paper]{article}
-\\usepackage{amsmath,amssymb,booktabs,geometry,hyperref}
+\\usepackage{amsmath,amssymb,booktabs,geometry,hyperref,pgfplots}
+\pgfplotsset{compat=1.18}
 \\geometry{margin=25mm}
 \\hypersetup{colorlinks=true,urlcolor=blue}
 \\title{Integer Points on Diophantine Equation}
@@ -1093,6 +1347,11 @@ ${tableRows}
 \\bottomrule
 \\end{tabular}
 \\end{center}`}
+
+\\section*{Curve Visualization}
+${searchMeta.pgfplots
+  ? `\\medskip\n${searchMeta.pgfplots}\n\\medskip`
+  : '\\textit{(Plot not available.)}'}
 
 \\section*{Notes}
 \\begin{itemize}

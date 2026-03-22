@@ -1169,6 +1169,270 @@ def api_diophantine():  # noqa: C901
     )
 
 
+# ── Plot helpers ───────────────────────────────────────────────────────────────
+
+def _build_pgfplots(eq_latex: str, n_val_str: str,
+                    pos_segs: list, neg_segs: list, sol_pts: list,
+                    xlo: float, xhi: float, ylo: float, yhi: float,
+                    mode: str) -> str:
+    """Return a self-contained pgfplots axis environment for the curve."""
+    DECIMATE = 3  # keep every 3rd point to control .tex size
+    lines: list[str] = []
+    lines.append(r"\begin{tikzpicture}")
+    lines.append(r"\begin{axis}[")
+    lines.append(r"  xlabel={$x$}, ylabel={$y$},")
+    if mode == "ec":
+        rhs_tex = eq_latex.replace("y^2 = ", "").replace("y\u00b2 = ", "")
+        title_str = f"$y^2 = {rhs_tex}$, $n = {n_val_str}$"
+    else:
+        title_str = f"${eq_latex}$"
+    lines.append(f"  title={{{title_str}}},")
+    lines.append(r"  grid=major,")
+    lines.append(f"  xmin={round(xlo, 2)}, xmax={round(xhi, 2)},")
+    lines.append(f"  ymin={round(ylo, 2)}, ymax={round(yhi, 2)},")
+    lines.append(r"  width=14cm, height=9cm,")
+    lines.append(r"  axis lines=center,")
+    lines.append(r"  tick label style={font=\small},")
+    lines.append(r"]")
+    for seg in pos_segs:
+        if len(seg) < 2:
+            continue
+        pts = seg[::DECIMATE] if len(seg) > DECIMATE * 2 else seg
+        coords = " ".join(f"({p[0]:.4f},{p[1]:.4f})" for p in pts)
+        lines.append(r"\addplot[blue, semithick, smooth] coordinates {")
+        lines.append(f"  {coords}")
+        lines.append(r"};")
+    for seg in neg_segs:
+        if len(seg) < 2:
+            continue
+        pts = seg[::DECIMATE] if len(seg) > DECIMATE * 2 else seg
+        coords = " ".join(f"({p[0]:.4f},{p[1]:.4f})" for p in pts)
+        lines.append(r"\addplot[blue, semithick, smooth] coordinates {")
+        lines.append(f"  {coords}")
+        lines.append(r"};")
+    if sol_pts:
+        coords = " ".join(f"({p[0]:.4f},{p[1]:.4f})" for p in sol_pts)
+        lines.append(r"\addplot[red, only marks, mark=*, mark size=4pt] coordinates {")
+        lines.append(f"  {coords}")
+        lines.append(r"};")
+    lines.append(r"\end{axis}")
+    lines.append(r"\end{tikzpicture}")
+    return "\n".join(lines)
+
+
+@app.route("/api/plot", methods=["POST"])
+def api_plot():  # noqa: C901
+    """
+    Generate curve data for canvas visualization and pgfplots export.
+
+    POST JSON:
+        mode      : "ec" | "gen"
+        expr      : RHS expression string (EC mode only)
+        eq        : full equation string (Gen mode only)
+        n_val     : n value as string, may be fractional (default "0")
+        x_min     : float — left edge of plotting window
+        x_max     : float — right edge of plotting window
+        solutions : [{x, y}, …] — integer points to highlight as red dots
+
+    Response JSON:
+        ok, pos_segments, neg_segments, sol_points, pgfplots, eq_latex, n_val
+    """
+    import math as _math
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode", "ec")
+
+    # Parse n_val — may be a rational string like "3/7"
+    n_val_str = str(data.get("n_val", "0")).strip()
+    try:
+        from fractions import Fraction as _Frac  # noqa: PLC0415
+        n_val_f = float(_Frac(n_val_str))
+    except Exception:  # noqa: BLE001
+        try:
+            n_val_f = float(n_val_str)
+        except Exception:  # noqa: BLE001
+            n_val_f = 0.0
+
+    solutions_raw = data.get("solutions", [])
+    try:
+        x_plot_min = float(data.get("x_min", -20))
+        x_plot_max = float(data.get("x_max",  20))
+    except (ValueError, TypeError):
+        x_plot_min, x_plot_max = -20.0, 20.0
+
+    # Sanitise plot range
+    if x_plot_max - x_plot_min <= 0 or x_plot_max - x_plot_min > 10_000:
+        x_plot_min = max(-200.0, x_plot_min)
+        x_plot_max = min( 200.0, x_plot_max)
+        if x_plot_max - x_plot_min <= 0:
+            x_plot_min, x_plot_max = -20.0, 20.0
+
+    N_SAMPLES = 600
+    span = x_plot_max - x_plot_min
+    xs = [x_plot_min + i * span / (N_SAMPLES - 1) for i in range(N_SAMPLES)]
+
+    pos_segments: list = []
+    neg_segments: list = []
+    eq_latex = ""
+
+    # ── EC mode: y² = expr(n, x) ─────────────────────────────────────────────
+    if mode == "ec":
+        expr_str = data.get("expr", "").strip()
+        if not expr_str:
+            return {"ok": False, "error": "No expression provided."}
+        try:
+            expr = parse_expr(expr_str)
+            eq_latex = f"y^2 = {sym_latex(expr)}"
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        try:
+            f_ec = lambdify((n_sym, x_sym), expr, modules=["numpy", "math"])
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+
+        xs_arr = np.array(xs, dtype=np.float64)
+        try:
+            rhs = np.asarray(f_ec(n_val_f, xs_arr), dtype=np.float64)
+            if rhs.ndim == 0:
+                rhs = np.full(len(xs_arr), float(rhs))
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "error": "Cannot evaluate expression for plotting."}
+
+        cur_pos: list = []
+        cur_neg: list = []
+        for xi, ri in zip(xs, rhs.tolist()):
+            if _math.isfinite(ri) and ri >= 0:
+                yi = _math.sqrt(ri)
+                cur_pos.append([round(xi, 5), round( yi, 5)])
+                cur_neg.append([round(xi, 5), round(-yi, 5)])
+            else:
+                if cur_pos:
+                    pos_segments.append(cur_pos)
+                    neg_segments.append(cur_neg)
+                    cur_pos = []
+                    cur_neg = []
+        if cur_pos:
+            pos_segments.append(cur_pos)
+            neg_segments.append(cur_neg)
+
+    # ── Gen mode: F(n, x, y) = 0 ─────────────────────────────────────────────
+    else:
+        eq_str = data.get("eq", "").strip()
+        if not eq_str:
+            return {"ok": False, "error": "No equation provided."}
+        try:
+            expr = parse_general_eq(eq_str)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+        # Build LaTeX representation
+        if "=" in eq_str:
+            parts = eq_str.split("=", 1)
+            try:
+                lhs_e = sympify(parts[0].strip().replace("^", "**"),
+                                locals={"n": n_sym, "x": x_sym, "y": y_sym})
+                rhs_e = sympify(parts[1].strip().replace("^", "**"),
+                                locals={"n": n_sym, "x": x_sym, "y": y_sym})
+                eq_latex = f"{sym_latex(lhs_e)} = {sym_latex(rhs_e)}"
+            except Exception:  # noqa: BLE001
+                eq_latex = sym_latex(expr) + " = 0"
+        else:
+            eq_latex = sym_latex(expr) + " = 0"
+
+        has_y = y_sym in expr.free_symbols
+        if has_y:
+            from sympy import Poly, expand as sp_expand  # noqa: PLC0415
+            try:
+                poly_t = Poly(sp_expand(expr), y_sym, domain="EX")
+                if poly_t.degree() >= 1:
+                    coeff_syms_list = poly_t.all_coeffs()
+                    coeff_fns_plot = [
+                        lambdify((n_sym, x_sym), c, modules=["numpy", "math"])
+                        for c in coeff_syms_list
+                    ]
+                    by_root: dict = {}
+                    for xi in xs:
+                        try:
+                            flt_c: list[float] = []
+                            for cf in coeff_fns_plot:
+                                v = cf(n_val_f, xi)
+                                flt_c.append(
+                                    float(v) if np.isscalar(v)
+                                    else float(np.asarray(v).flat[0])
+                                )
+                            while len(flt_c) > 1 and flt_c[0] == 0.0:
+                                flt_c.pop(0)
+                            if len(flt_c) < 2:
+                                continue
+                            roots = np.roots(flt_c)
+                            real_roots = sorted(
+                                r.real for r in roots if abs(r.imag) < 0.1
+                            )
+                            for ri_idx, yr in enumerate(real_roots):
+                                by_root.setdefault(ri_idx, []).append(
+                                    [round(xi, 5), round(yr, 5)]
+                                )
+                        except Exception:  # noqa: BLE001
+                            pass
+                    for seg in by_root.values():
+                        if len(seg) > 1:
+                            pos_segments.append(seg)
+            except Exception:  # noqa: BLE001
+                pass
+
+    # ── Solution points ───────────────────────────────────────────────────────
+    sol_pts: list = []
+    for s in solutions_raw:
+        try:
+            yv = s.get("y", "")
+            if str(yv) == "\u2014":  # em-dash means y absent (brute2 mode)
+                continue
+            sol_pts.append([float(str(s.get("x", 0))), float(str(yv))])
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ── Compute y-axis bounds ─────────────────────────────────────────────────
+    all_ys: list[float] = []
+    for seg in pos_segments + neg_segments:
+        all_ys.extend(p[1] for p in seg)
+    for sp in sol_pts:
+        all_ys.append(sp[1])
+
+    if all_ys:
+        y_lo = min(all_ys)
+        y_hi = max(all_ys)
+        margin = max(1.0, (y_hi - y_lo) * 0.12)
+        y_lo -= margin
+        y_hi += margin
+    else:
+        y_lo, y_hi = -10.0, 10.0
+
+    # Clamp extreme y range so the plot remains useful
+    if y_hi - y_lo > 20_000:
+        y_lo = max(y_lo, -2_000.0)
+        y_hi = min(y_hi,  2_000.0)
+
+    pgfplots = _build_pgfplots(
+        eq_latex, n_val_str,
+        pos_segments, neg_segments, sol_pts,
+        x_plot_min, x_plot_max, y_lo, y_hi,
+        mode,
+    )
+
+    return {
+        "ok":           True,
+        "pos_segments": pos_segments,
+        "neg_segments": neg_segments,
+        "sol_points":   sol_pts,
+        "x_min":        x_plot_min,
+        "x_max":        x_plot_max,
+        "y_min":        round(y_lo, 3),
+        "y_max":        round(y_hi, 3),
+        "eq_latex":     eq_latex,
+        "pgfplots":     pgfplots,
+        "n_val":        n_val_str,
+    }
+
+
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5001))
