@@ -908,8 +908,13 @@ tbody td:first-child { color: var(--text-dim); font-size: .78rem; }
     display: block !important;
     margin-bottom: 14px;
   }
-  #print-header h2 { font-size: 1rem; margin: 0 0 3px; font-family: serif; }
-  #print-header p  { font-size: .78rem; color: #444; margin: 0; }
+  #print-header h2       { font-size: 1.05rem; margin: 0 0 4px; font-family: serif; }
+  #print-header .ph-generated { font-size: .78rem; color: #444; margin: 0 0 8px; }
+  #print-header .ph-meta      { font-size: .78rem; color: #222; margin-top: 6px;
+                                  border-top: 1px solid #bbb; padding-top: 6px; }
+  #print-header .ph-meta strong { display: block; margin-bottom: 4px; font-size: .8rem; }
+  #print-header .ph-meta ul  { margin: 0 0 0 16px; padding: 0; }
+  #print-header .ph-meta li  { margin: 2px 0; line-height: 1.4; }
 
   /* Clean table */
   #results-table { width: 100%; border-collapse: collapse; font-size: .82rem; }

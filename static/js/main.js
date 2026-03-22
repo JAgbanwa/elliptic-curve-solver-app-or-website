@@ -258,8 +258,8 @@ let nTotalCount = 0;      // total n-values in last search (for n-summary)
 let lastGroupN  = null;   // n-value of the current table group header
 let currentSolverMode = "ec";  // "ec" | "gen"
 let ecVarMode  = "3var";       // "2var" | "3var"  — for y² = f mode
-let genVarMode = "3var";       // "2var" | "3var"  — for General Diophantine
-
+let genVarMode = "3var";       // "2var" | "3var"  — for General Diophantine// Search metadata — captured at search start, used by PDF/LaTeX export
+let searchMeta = {};      // snapshot of search parameters
 /* ═══════════════════════════════════════════════════════════════════════════
    LATEX PREVIEW
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -490,6 +490,45 @@ function startSearch() {
   btnSearch.disabled = true;
   btnStop.disabled   = false;
 
+  // Snapshot all search parameters for later use in PDF / LaTeX export
+  const isGen = currentSolverMode === "gen";
+  const isEC2var = !isGen && ecVarMode === "2var";
+  searchMeta = {
+    mode:        currentSolverMode,   // "ec" | "gen"
+    ecVarMode:   ecVarMode,
+    genVarMode:  genVarMode,
+    equation:    isGen ? genEqIn.value.trim() : `y\u00b2 = ${exprInput.value.trim()}`,
+    startedAt:   Date.now(),
+    finishedAt:  null,
+    // n range
+    nMin:        isEC2var ? ecNSingleIn.value : nMinIn.value,
+    nMax:        isEC2var ? ecNSingleIn.value : nMaxIn.value,
+    nDenom:      isEC2var ? "1"               : nDenomIn.value,
+    // x range
+    xMode:       isGen ? "fixed" : xModeSelect.value,
+    xMin:        isGen ? genXMinIn.value : xMinIn.value,
+    xMax:        isGen ? genXMaxIn.value : xMaxIn.value,
+    xScaleFactor: xScaleFactorIn.value,
+    xCenterExpr:  xCenterExprIn.value,
+    xHalfWidth:   xHalfWidthIn.value,
+    xDivisorPoly: xDivisorPolyIn.value,
+    xDivisorMax:  xDivisorMaxIn.value,
+    xStartExpr:   xStartExprIn.value,
+    xEndExpr:     xEndExprIn.value,
+    xStepExpr:    xStepExprIn.value,
+    // y range (gen mode only)
+    yMin:        isGen ? genYMinIn.value : null,
+    yMax:        isGen ? genYMaxIn.value : null,
+    // constraints
+    skipZeroN:   skipZeroNChk.checked,
+    skipZeroX:   skipZeroXChk.checked,
+    // filled in from SSE "start" and "done" messages
+    nCount:      0,
+    totalEvals:  0,
+    strategy:    "",
+    exhaustive:  true,
+  };
+
   const searchUrl = currentSolverMode === "gen" ? buildDiophURL() : buildSearchURL();
   evtSource = new EventSource(searchUrl);
 
@@ -507,6 +546,9 @@ function startSearch() {
 
       case "start":
         nTotalCount = msg.n_count;
+        searchMeta.nCount     = msg.n_count;
+        searchMeta.totalEvals = msg.total_evals || 0;
+        searchMeta.strategy   = msg.strategy || "fixed";
         if (msg.x_scale > 0) {
           setStatus(
             `Searching ${msg.n_count.toLocaleString()} n-values, auto-scaled x (k=${msg.x_scale})`
@@ -627,6 +669,7 @@ function startSearch() {
 
       case "done":
         evtSource.close(); evtSource = null;
+        searchMeta.finishedAt = Date.now();
         btnSearch.disabled = false;
         btnStop.disabled   = true;
         progressFill.style.width = "100%";
@@ -798,14 +841,155 @@ function buildDiophURL() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   EXPORT  (CSV + PDF)
+   EXPORT  (CSV + PDF + LaTeX)
    ═══════════════════════════════════════════════════════════════════════════ */
-const btnExportPdf = document.getElementById("btn-export-pdf");
+const btnExportPdf   = document.getElementById("btn-export-pdf");
+const btnExportLatex = document.getElementById("btn-export-latex");
 
 function buildExportMeta() {
   const isGen = currentSolverMode === "gen";
   const eqStr = isGen ? genEqIn.value.trim() : `y\u00b2 = ${exprInput.value.trim()}`;
   return { isGen, eqStr };
+}
+
+/* ── Shared helper: builds human-readable search-bounds block ── */
+function buildBoundsLines(forLatex) {
+  const m   = searchMeta;
+  const isG = m.mode === "gen";
+  const lines = [];
+
+  // Equation
+  if (forLatex) {
+    const eqTex = m.equation
+      .replace(/\*\*/g, "^").replace(/\*/g, " \\cdot ")
+      .replace(/y\u00b2/g, "y^2");
+    lines.push(`\\textbf{Equation:} $${eqTex}$`);
+  } else {
+    lines.push(`Equation: ${m.equation}`);
+  }
+
+  // n range
+  const nDesc = m.nDenom && m.nDenom !== "1"
+    ? ` (step 1/${m.nDenom})`
+    : "";
+  if (m.nMin === m.nMax) {
+    lines.push(forLatex
+      ? `\\textbf{Parameter } $n$\\textbf{:} fixed at $n = ${m.nMin}$${nDesc}`
+      : `Parameter n: fixed at n = ${m.nMin}${nDesc}`);
+  } else {
+    lines.push(forLatex
+      ? `\\textbf{Parameter } $n$\\textbf{:} $${m.nMin} \\leq n \\leq ${m.nMax}$${nDesc ? ` ${nDesc}` : ""}`
+      : `Parameter n: ${m.nMin} \u2264 n \u2264 ${m.nMax}${nDesc}`);
+  }
+  if (m.nCount) {
+    lines.push(forLatex
+      ? `\\textbf{Curves searched:} ${m.nCount.toLocaleString()}`
+      : `Curves searched: ${m.nCount.toLocaleString()}`);
+  }
+
+  // x range
+  if (!isG) {
+    switch (m.xMode) {
+      case "fixed":
+        lines.push(forLatex
+          ? `\\textbf{Variable } $x$\\textbf{:} $${m.xMin} \\leq x \\leq ${m.xMax}$`
+          : `Variable x: ${m.xMin} \u2264 x \u2264 ${m.xMax}`);
+        break;
+      case "autoscale":
+        lines.push(forLatex
+          ? `\\textbf{Variable } $x$\\textbf{:} auto-scaled, $|x| \\leq k|n|$ with $k = ${m.xScaleFactor}$`
+          : `Variable x: auto-scaled, |x| \u2264 k|n| with k = ${m.xScaleFactor}`);
+        break;
+      case "window":
+        lines.push(forLatex
+          ? `\\textbf{Variable } $x$\\textbf{:} smart window centred on $${m.xCenterExpr}$, half-width $${m.xHalfWidth}$`
+          : `Variable x: smart window centred on ${m.xCenterExpr} \u00b1 ${m.xHalfWidth}`);
+        break;
+      case "divisor":
+        lines.push(forLatex
+          ? `\\textbf{Variable } $x$\\textbf{:} divisor search, $x \\mid P(n) = ${m.xDivisorPoly}$, $|x| \\leq ${m.xDivisorMax}$`
+          : `Variable x: divisor search, x | P(n) = ${m.xDivisorPoly}, |x| \u2264 ${m.xDivisorMax}`);
+        break;
+      case "exprrange":
+        lines.push(forLatex
+          ? `\\textbf{Variable } $x$\\textbf{:} expression range $[${m.xStartExpr},\\, ${m.xEndExpr}]$, step $${m.xStepExpr}$`
+          : `Variable x: expression range [${m.xStartExpr}, ${m.xEndExpr}], step ${m.xStepExpr}`);
+        break;
+    }
+  } else {
+    lines.push(forLatex
+      ? `\\textbf{Variable } $x$\\textbf{:} $${m.xMin} \\leq x \\leq ${m.xMax}$`
+      : `Variable x: ${m.xMin} \u2264 x \u2264 ${m.xMax}`);
+  }
+
+  // y range (gen mode)
+  if (isG && m.yMin !== null) {
+    lines.push(forLatex
+      ? `\\textbf{Variable } $y$\\textbf{:} $${m.yMin} \\leq y \\leq ${m.yMax}$`
+      : `Variable y: ${m.yMin} \u2264 y \u2264 ${m.yMax}`);
+  }
+
+  // Height bound note
+  const xAbsMax = isG ? (m.xMax ? Math.max(Math.abs(+m.xMax), Math.abs(+m.xMin)) : "?")
+                      : (m.xMode === "fixed" ? Math.max(Math.abs(+m.xMax), Math.abs(+m.xMin)) : "\u221e (adaptive)");
+  if (m.xMode === "fixed" || isG) {
+    lines.push(forLatex
+      ? `\\textbf{Naive height bound:} $|x| \\leq ${xAbsMax}$${isG && m.yMax !== null ? `, $|y| \\leq ${Math.max(Math.abs(+m.yMax), Math.abs(+m.yMin))}$` : ""}`
+      : `Naive height bound: |x| \u2264 ${xAbsMax}${isG && m.yMax !== null ? `, |y| \u2264 ${Math.max(Math.abs(+m.yMax), Math.abs(+m.yMin))}` : ""}`);
+    lines.push(forLatex
+      ? `\\textbf{Search is exhaustive} within the stated bounds`
+      : `Search is exhaustive within the stated bounds`);
+  } else {
+    lines.push(forLatex
+      ? `\\textbf{Search is exhaustive} within the stated $x$-range for each $n$`
+      : `Search is exhaustive within the stated x-range for each n`);
+  }
+
+  // Constraints
+  const constraints = [];
+  if (m.skipZeroN) constraints.push("n \u2260 0");
+  if (m.skipZeroX) constraints.push("x \u2260 0");
+  if (constraints.length) {
+    lines.push(forLatex
+      ? `\\textbf{Constraints:} $${constraints.join(",\\; ")}$`
+      : `Constraints: ${constraints.join(", ")}`);
+  }
+
+  // Strategy
+  const strategyLabel = {
+    "": "fixed-range y²=f(n,x) scan",
+    "fixed": "fixed-range y²=f(n,x) scan",
+    "autoscale": "auto-scaled x range",
+    "window": "smart window (exact big-integer)",
+    "divisor": "divisor search",
+    "exprrange": "expression range (exact big-integer)",
+    "poly_y": "polynomial-in-y solve (general Diophantine)",
+    "brute3": "3D brute-force (general Diophantine)",
+    "brute2": "2-variable scan (general Diophantine)",
+  }[m.strategy] || m.strategy;
+  lines.push(forLatex
+    ? `\\textbf{Search strategy:} ${strategyLabel}`
+    : `Search strategy: ${strategyLabel}`);
+
+  // Total evals
+  if (m.totalEvals) {
+    lines.push(forLatex
+      ? `\\textbf{Total evaluations:} ${m.totalEvals.toLocaleString()}`
+      : `Total evaluations: ${m.totalEvals.toLocaleString()}`);
+  }
+
+  // Compute time
+  if (m.finishedAt && m.startedAt) {
+    const ms = m.finishedAt - m.startedAt;
+    const timeStr = ms < 1000 ? `${ms} ms`
+                  : ms < 60000 ? `${(ms / 1000).toFixed(2)} s`
+                  : `${Math.floor(ms / 60000)} min ${((ms % 60000) / 1000).toFixed(1)} s`;
+    lines.push(forLatex
+      ? `\\textbf{Compute time:} ${timeStr}`
+      : `Compute time: ${timeStr}`);
+  }
+
+  return lines;
 }
 
 /* ── CSV ── */
@@ -829,23 +1013,104 @@ btnExport.addEventListener("click", () => {
 btnExportPdf.addEventListener("click", () => {
   if (!allSolutions.length) return;
   const { eqStr } = buildExportMeta();
-  const date = new Date().toLocaleString();
+  const date  = new Date().toLocaleString();
   const count = allSolutions.length;
+  const boundsLines = buildBoundsLines(false);
 
-  // Inject a print-only header element above the table
   let hdr = document.getElementById("print-header");
   if (!hdr) {
     hdr = document.createElement("div");
     hdr.id = "print-header";
-    hdr.style.display = "none";   // hidden on screen; shown via @media print
+    hdr.style.display = "none";
     const tableWrapEl = document.getElementById("table-wrap");
     tableWrapEl.parentNode.insertBefore(hdr, tableWrapEl);
   }
   hdr.innerHTML =
-    `<h2>Solutions &mdash; ${escHtml(eqStr)}</h2>` +
-    `<p>${escHtml(count.toLocaleString())} integer point${count !== 1 ? "s" : ""} found &nbsp;&bull;&nbsp; Generated ${escHtml(date)}</p>`;
+    `<h2>Integer Points &mdash; ${escHtml(eqStr)}</h2>` +
+    `<p class="ph-generated">Generated: ${escHtml(date)} &nbsp;&bull;&nbsp; ` +
+    `${escHtml(count.toLocaleString())} solution${count !== 1 ? "s" : ""} found</p>` +
+    `<div class="ph-meta"><strong>Search parameters</strong><ul>` +
+    boundsLines.map(l => `<li>${escHtml(l)}</li>`).join("") +
+    `</ul></div>`;
 
   window.print();
+});
+
+/* ── LaTeX (.tex file download) ── */
+btnExportLatex.addEventListener("click", () => {
+  if (!allSolutions.length) return;
+  const { eqStr } = buildExportMeta();
+  const date  = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+  const count = allSolutions.length;
+  const boundsLines = buildBoundsLines(true);
+  const isGen = currentSolverMode === "gen";
+
+  // Equation in TeX
+  const rawEq = isGen ? genEqIn.value.trim() : exprInput.value.trim();
+  const eqTex = rawEq
+    .replace(/\*\*/g, "^").replace(/\*/g, " \\cdot ")
+    .replace(/y\u00b2/g, "y^2");
+
+  // Solutions table rows
+  const tableRows = allSolutions
+    .map(({ n, x, y }) =>
+      `  ${String(n).replace(/-/g, "$-$")} & ${String(x).replace(/-/g, "$-$")} & ${String(y).replace(/-/g, "$-$")} \\\\`)
+    .join("\n");
+
+  const tex = `% Elliptic Curve Solver — Integer Points Report
+% Generated: ${date}
+\\documentclass[12pt,a4paper]{article}
+\\usepackage{amsmath,amssymb,booktabs,geometry,hyperref}
+\\geometry{margin=25mm}
+\\hypersetup{colorlinks=true,urlcolor=blue}
+\\title{Integer Points on Diophantine Equation}
+\\date{${date}}
+\\author{Elliptic Curve Solver}
+\\begin{document}
+\\maketitle
+
+\\section*{Equation}
+\\[
+  ${eqTex}
+\\]
+
+\\section*{Search Parameters}
+\\begin{itemize}
+${boundsLines.map(l => `  \\item ${l}`).join("\n")}
+\\end{itemize}
+
+\\section*{Results}
+${count === 0
+  ? "\\textit{No integer solutions found within the stated bounds.}"
+  : `${count.toLocaleString()} integer point${count !== 1 ? "s" : ""} found:
+
+\\begin{center}
+\\begin{tabular}{rrr}
+\\toprule
+$n$ & $x$ & $y$ \\\\
+\\midrule
+${tableRows}
+\\bottomrule
+\\end{tabular}
+\\end{center}`}
+
+\\section*{Notes}
+\\begin{itemize}
+  \\item All solutions listed have been verified by exact arithmetic.
+  \\item The search is exhaustive within the bounds stated above;
+        solutions outside these bounds may exist.
+  \\item Tool: \\href{https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website}{Elliptic Curve Solver} — powered by NumPy, SymPy, Flask.
+\\end{itemize}
+
+\\end{document}
+`;
+
+  const blob = new Blob([tex], { type: "text/x-tex" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "diophantine_solutions.tex";
+  a.click();
+  URL.revokeObjectURL(a.href);
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
