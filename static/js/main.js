@@ -886,6 +886,7 @@ EXAMPLES.forEach((ex) => {
       skipZeroXChk.checked = !!ex.skipZeroX;
       renderGenPreview(ex.eq || "");
       document.querySelector(".main-grid").scrollIntoView({ behavior: "smooth" });
+      startSearch();
       return;
     }
     // ── y² = f(n,x) mode ─────────────────────────────────────────────────
@@ -922,6 +923,7 @@ EXAMPLES.forEach((ex) => {
     skipZeroXChk.checked = !!ex.skipZeroX;
     fetchLatex(ex.expr);
     document.querySelector(".main-grid").scrollIntoView({ behavior: "smooth" });
+    startSearch();
   }
 
   card.addEventListener("click",   loadExample);
