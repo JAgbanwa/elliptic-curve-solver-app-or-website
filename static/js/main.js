@@ -656,16 +656,21 @@ function startSearch() {
   };
 
   evtSource.onerror = () => {
-    // Only treat as an error if the stream wasn't already closed cleanly by
-    // the 'done' handler (which sets evtSource = null before the server drops
-    // the connection, causing browsers to fire onerror spuriously).
-    if (evtSource) {
-      evtSource.close();
-      evtSource = null;
-      btnSearch.disabled = false;
-      btnStop.disabled   = true;
-      setStatus("Connection error — search interrupted.", "status-error");
-    }
+    // Browsers sometimes fire onerror BEFORE dispatching the final onmessage
+    // ("done") event when the server closes the connection cleanly.  Delaying
+    // by one macrotask (setTimeout 0) lets any pending onmessage events fire
+    // first — the done handler sets evtSource = null, so the check below
+    // correctly suppresses the spurious error in that case.
+    const capturedSource = evtSource;
+    setTimeout(() => {
+      if (evtSource && evtSource === capturedSource) {
+        evtSource.close();
+        evtSource = null;
+        btnSearch.disabled = false;
+        btnStop.disabled   = true;
+        setStatus("Connection error — search interrupted.", "status-error");
+      }
+    }, 0);
   };
 }
 
