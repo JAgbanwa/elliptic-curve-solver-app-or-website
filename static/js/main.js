@@ -199,6 +199,35 @@ const genXMaxIn      = document.getElementById("gen-x-max");
 const genYMinIn      = document.getElementById("gen-y-min");
 const genYMaxIn      = document.getElementById("gen-y-max");
 const thVerify       = document.getElementById("th-verify");
+const btnThemeToggle = document.getElementById("btn-theme-toggle");
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function initTheme() {
+  // The inline <script> in <head> already set data-theme to prevent flash.
+  // Here we sync the button label to the current theme.
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  _applyThemeBtn(current);
+})();
+
+function _applyThemeBtn(theme) {
+  if (theme === "light") {
+    btnThemeToggle.textContent = "🌙";
+    btnThemeToggle.title = "Switch to dark mode";
+  } else {
+    btnThemeToggle.textContent = "☀";
+    btnThemeToggle.title = "Switch to light mode";
+  }
+}
+
+btnThemeToggle.addEventListener("click", function () {
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("theme", next);
+  _applyThemeBtn(next);
+});
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STATE

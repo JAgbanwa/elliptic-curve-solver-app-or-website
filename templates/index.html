@@ -23,6 +23,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('theme');
+      if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      if (t === 'light') document.documentElement.setAttribute('data-theme','light');
+    })();
+  </script>
   <!-- KaTeX for math rendering -->
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css"
@@ -48,6 +56,7 @@
         <a class="nav-link" href="#how-it-works">How it works</a>
         <a class="nav-link" href="#examples">Examples</a>
         <a class="nav-link btn-outline" href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">GitHub</a>
+        <button id="btn-theme-toggle" class="btn-theme-toggle" type="button" title="Switch to light mode" aria-label="Toggle theme">☀</button>
       </nav>
     </div>
   </header>
