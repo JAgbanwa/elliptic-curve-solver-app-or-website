@@ -1273,6 +1273,7 @@ def api_plot():  # noqa: C901
     pos_segments: list = []
     neg_segments: list = []
     eq_latex = ""
+    curve_strategy = "none"
 
     # ── EC mode: y² = expr(n, x) ─────────────────────────────────────────────
     if mode == "ec":
@@ -1313,6 +1314,7 @@ def api_plot():  # noqa: C901
         if cur_pos:
             pos_segments.append(cur_pos)
             neg_segments.append(cur_neg)
+        curve_strategy = "ec" if pos_segments else "ec_no_real"
 
     # ── Gen mode: F(n, x, y) = 0 ─────────────────────────────────────────────
     else:
@@ -1341,8 +1343,10 @@ def api_plot():  # noqa: C901
         has_y = y_sym in expr.free_symbols
         if has_y:
             from sympy import Poly, expand as sp_expand  # noqa: PLC0415
+            _poly_tried = False
             try:
                 poly_t = Poly(sp_expand(expr), y_sym, domain="EX")
+                _poly_tried = True
                 if poly_t.degree() >= 1:
                     coeff_syms_list = poly_t.all_coeffs()
                     coeff_fns_plot = [
@@ -1378,6 +1382,14 @@ def api_plot():  # noqa: C901
                             pos_segments.append(seg)
             except Exception:  # noqa: BLE001
                 pass
+            if not _poly_tried:
+                curve_strategy = "brute3"  # y not polynomial (e.g. x^y = n)
+            elif pos_segments:
+                curve_strategy = "poly_y"
+            else:
+                curve_strategy = "poly_y_no_real"
+        else:
+            curve_strategy = "brute2"  # y absent from equation
 
     # ── Solution points ───────────────────────────────────────────────────────
     sol_pts: list = []
@@ -1419,17 +1431,18 @@ def api_plot():  # noqa: C901
     )
 
     return {
-        "ok":           True,
-        "pos_segments": pos_segments,
-        "neg_segments": neg_segments,
-        "sol_points":   sol_pts,
-        "x_min":        x_plot_min,
-        "x_max":        x_plot_max,
-        "y_min":        round(y_lo, 3),
-        "y_max":        round(y_hi, 3),
-        "eq_latex":     eq_latex,
-        "pgfplots":     pgfplots,
-        "n_val":        n_val_str,
+        "ok":             True,
+        "pos_segments":   pos_segments,
+        "neg_segments":   neg_segments,
+        "sol_points":     sol_pts,
+        "x_min":          x_plot_min,
+        "x_max":          x_plot_max,
+        "y_min":          round(y_lo, 3),
+        "y_max":          round(y_hi, 3),
+        "eq_latex":       eq_latex,
+        "pgfplots":       pgfplots,
+        "n_val":          n_val_str,
+        "curve_strategy": curve_strategy,
     }
 
 

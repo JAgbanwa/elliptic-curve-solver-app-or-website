@@ -917,6 +917,11 @@ async function loadPlot() {
     });
     const data = await resp.json();
     if (data.ok) {
+      // Don't open an empty panel — nothing useful to render
+      const hasAnything = data.pos_segments.length > 0
+                       || data.neg_segments.length > 0
+                       || data.sol_points.length  > 0;
+      if (!hasAnything) return;
       plotData = data;
       searchMeta.pgfplots = data.pgfplots;
       searchMeta.eqLatex  = data.eq_latex;
@@ -927,7 +932,7 @@ async function loadPlot() {
       renderPlot();
     }
   } catch (_) {
-    // Visualization is optional — silent failure
+    // Visualization is optional
   }
 }
 
@@ -1049,12 +1054,20 @@ function renderPlot() {
   // Caption
   const cap = document.getElementById("plot-caption");
   if (cap) {
-    cap.textContent =
-      `Curve for n\u202f=\u202f${plotData.n_val}\u2002|\u2002`
-      + `${sol_points.length} integer point${sol_points.length !== 1 ? "s" : ""} highlighted`
-      + (sol_points.length < allSolutions.length
-          ? ` (${allSolutions.length} total across all n)`
-          : "");
+    const hasCurve = pos_segments.length > 0 || neg_segments.length > 0;
+    let capText = `Curve for n\u202f=\u202f${plotData.n_val}\u2002|\u2002`
+      + `${sol_points.length} integer point${sol_points.length !== 1 ? "s" : ""} highlighted`;
+    if (!hasCurve) {
+      const s = plotData.curve_strategy || "";
+      const reason = s === "brute3"          ? "equation is not polynomial in y \u2014 curve shape unavailable"
+                   : s === "poly_y_no_real"   ? "no real branches in this x range"
+                   : s === "ec_no_real"       ? "no real branches in this x range"
+                   : "curve shape unavailable";
+      capText += `\u2002\u2014\u2002\u26a0 ${reason}`;
+    } else if (sol_points.length < allSolutions.length) {
+      capText += ` (${allSolutions.length} total across all n)`;
+    }
+    cap.textContent = capText;
   }
 }
 
