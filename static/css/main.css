@@ -98,21 +98,23 @@ code { font-family: var(--font-mono); font-size: .87em;
 
 /* ── Theme toggle button ────────────────────────────────────────────────── */
 .btn-theme-toggle {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 5px 9px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 5px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 1rem; line-height: 1;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: .82rem; font-weight: 600; line-height: 1;
   cursor: pointer;
   transition: color .15s, background .15s, border-color .15s;
+  white-space: nowrap;
 }
 .btn-theme-toggle:hover {
-  color: var(--text);
-  background: var(--surface2);
+  background: var(--accent-glow);
   border-color: var(--accent);
+  color: var(--accent);
 }
+.theme-icon { font-size: 1rem; line-height: 1; }
 
 /* ── Main grid ───────────────────────────────────────────────────────────── */
 .main-grid {

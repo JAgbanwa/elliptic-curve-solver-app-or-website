@@ -23,6 +23,8 @@ from sympy import symbols, sympify, lambdify, latex as sym_latex
 from sympy.core.sympify import SympifyError
 
 app = Flask(__name__)
+# Disable static-file caching so browsers always fetch the latest CSS/JS
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 n_sym, x_sym, y_sym = symbols("n x y")
 

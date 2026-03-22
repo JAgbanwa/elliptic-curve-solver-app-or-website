@@ -212,11 +212,15 @@ const btnThemeToggle = document.getElementById("btn-theme-toggle");
 
 function _applyThemeBtn(theme) {
   if (!btnThemeToggle) return;
+  const icon  = btnThemeToggle.querySelector(".theme-icon");
+  const label = btnThemeToggle.querySelector(".theme-label");
   if (theme === "light") {
-    btnThemeToggle.textContent = "\uD83C\uDF19"; // 🌙
+    if (icon)  icon.textContent  = "\uD83C\uDF19"; // 🌙
+    if (label) label.textContent = "Dark mode";
     btnThemeToggle.title = "Switch to dark mode";
   } else {
-    btnThemeToggle.textContent = "\u2600\uFE0F"; // ☀️
+    if (icon)  icon.textContent  = "\u2600\uFE0F"; // ☀️
+    if (label) label.textContent = "Light mode";
     btnThemeToggle.title = "Switch to light mode";
   }
 }
