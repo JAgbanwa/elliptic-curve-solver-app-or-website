@@ -844,6 +844,7 @@ function buildDiophURL() {
   });
   if (skipZeroNChk.checked) p.set("skip_zero_n", "1");
   if (skipZeroXChk.checked) p.set("skip_zero_x", "1");
+  if (document.getElementById("gen-sym-reduction")?.checked) p.set("sym_reduction", "1");
   return "/api/diophantine?" + p.toString();
 }
 

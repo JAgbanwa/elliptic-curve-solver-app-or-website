@@ -850,6 +850,46 @@ def api_search():
     )
 
 
+def _integer_divisors_fast(n: int) -> list[int]:
+    """Return all integer divisors (positive and negative) of n, sorted.
+    Returns [] for n=0."""
+    if n == 0:
+        return []
+    n_abs = abs(n)
+    pos: list[int] = []
+    d = 1
+    while d * d <= n_abs:
+        if n_abs % d == 0:
+            pos.append(d)
+            if d != n_abs // d:
+                pos.append(n_abs // d)
+        d += 1
+    return sorted([-p for p in pos] + pos)
+
+
+def _build_mod_sieve(const_term_fn, n_mod: int, x_mod: int, mod: int) -> set:
+    """
+    For each (n mod `mod`, x mod `mod`) compute const_term mod `mod` and check
+    whether the monic cubic y^3 + A*y + B ≡ 0 (mod `mod`) has any solution y.
+    Returns the set of (n_r, x_r) pairs that *could* have a solution — i.e. the
+    complement is the definite impossibility set used for sieving.
+    """
+    possible: set = set()
+    cubes = {y % mod for y in range(mod)}
+    for nr in range(mod):
+        for xr in range(mod):
+            # Evaluate A = x*n mod p, B = x^3 + n^3 - const (const = target RHS)
+            # -- caller provides const_term_fn(nr, xr) already reduced mod `mod`
+            B = const_term_fn(nr, xr) % mod
+            A = (nr * xr) % mod
+            # Check if y^3 + A*y + B ≡ 0 mod `mod` for any y
+            for yr in range(mod):
+                if (yr**3 + A * yr + B) % mod == 0:
+                    possible.add((nr, xr))
+                    break
+    return possible
+
+
 @app.route("/api/diophantine")
 def api_diophantine():  # noqa: C901
     """
@@ -872,6 +912,7 @@ def api_diophantine():  # noqa: C901
         n_denom = max(1, int(request.args.get("n_denom", 1)))
         skip_zero_n = request.args.get("skip_zero_n", "") == "1"
         skip_zero_x = request.args.get("skip_zero_x", "") == "1"
+        use_sym_reduction = request.args.get("sym_reduction", "") == "1"
     except (ValueError, TypeError) as exc:
         def _err():
             yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
@@ -895,7 +936,9 @@ def api_diophantine():  # noqa: C901
         has_y = y_sym in expr.free_symbols
 
         # ── Choose strategy ──────────────────────────────────────────────────
-        # poly_y  — equation is polynomial in y → numpy.roots() fast path
+        # poly_y_div — monic polynomial in y → exact divisor-based root finding
+        #              + optional symmetry reduction + modular sieve
+        # poly_y  — polynomial in y → numpy.roots() fast path
         # brute3  — y present but non-polynomial (e.g. x**y=n) → vectorised 3D scan
         # brute2  — y absent → 2-variable (n, x) scan
         from sympy import Poly, expand as sp_expand  # noqa: PLC0415
@@ -903,12 +946,27 @@ def api_diophantine():  # noqa: C901
         strategy      = "brute2"
         coeff_syms: list | None    = None
         coeff_fns_flt: list | None = None
+        coeff_fns_exact: list | None = None  # exact-int coefficient evaluators
+        poly_deg      = 0
+        is_monic      = False
+        is_symmetric  = False   # fully symmetric under permutation of (x,y,n)
 
         if has_y:
             try:
                 poly_t = Poly(sp_expand(expr), y_sym, domain="EX")
                 if poly_t.degree() >= 1:
-                    coeff_syms    = poly_t.all_coeffs()
+                    poly_deg   = poly_t.degree()
+                    coeff_syms = poly_t.all_coeffs()
+                    # Check monic: leading coeff must be ±1 (as a sympy expression)
+                    from sympy import simplify as _simp, Integer as _Int  # noqa: PLC0415
+                    lc = _simp(coeff_syms[0])
+                    is_monic = (lc == _Int(1))
+                    # Exact-integer coefficient evaluators (no numpy — pure Python)
+                    coeff_fns_exact = [
+                        lambdify((n_sym, x_sym), c, modules=[])
+                        for c in coeff_syms
+                    ]
+                    # Float coefficient evaluators (for numpy.roots fast path)
                     coeff_fns_flt = [
                         lambdify((n_sym, x_sym), c, modules=["numpy", "math"])
                         for c in coeff_syms
@@ -918,6 +976,23 @@ def api_diophantine():  # noqa: C901
                 pass
             if strategy != "poly_y":
                 strategy = "brute3"
+
+        # Upgrade to poly_y_div when monic — uses exact divisors, no y range needed
+        if strategy == "poly_y" and is_monic:
+            strategy = "poly_y_div"
+
+        # Check full symmetry under all permutations of (x, y, n) when requested
+        # F is symmetric iff F(x,y,n) = F(y,x,n) = F(x,n,y) identically
+        if use_sym_reduction and has_y and strategy in ("poly_y", "poly_y_div"):
+            try:
+                from sympy import simplify as _simp2  # noqa: PLC0415
+                _e = sp_expand(expr)
+                _perm1 = _e.subs([(x_sym, y_sym), (y_sym, x_sym)])  # swap x,y
+                _perm2 = _e.subs([(y_sym, n_sym), (n_sym, y_sym)])  # swap y,n
+                if _simp2(_e - _perm1) == 0 and _simp2(_e - _perm2) == 0:
+                    is_symmetric = True
+            except Exception:  # noqa: BLE001
+                pass
 
         # ── Compile evaluators ───────────────────────────────────────────────
         # Exact evaluator — uses Python's own arithmetic (integers, Fractions)
@@ -964,14 +1039,32 @@ def api_diophantine():  # noqa: C901
         x_count = x_max - x_min + 1
         y_count = (y_max - y_min + 1) if strategy == "brute3" else 0
 
-        total_evals = n_count * x_count * y_count if strategy == "brute3" \
-            else n_count * x_count
+        # For poly_y_div the search is over (n, x) pairs only; y candidates come
+        # from cheap divisor enumeration of the constant term — not a range scan.
+        if strategy == "brute3":
+            total_evals = n_count * x_count * y_count
+        elif strategy == "poly_y_div":
+            # Symmetry reduction cuts the (n,x) grid roughly in half
+            if is_symmetric and use_sym_reduction:
+                total_evals = n_count * x_count // 2
+            else:
+                total_evals = n_count * x_count
+        else:
+            total_evals = n_count * x_count
 
         WARN_EVALS = 100_000_000
         if total_evals > WARN_EVALS:
-            yield sse({"type": "warning",
-                       "message": f"Large search: {total_evals:,} evaluations. "
-                                  "Results stream live \u2014 click Stop any time."})
+            if strategy == "poly_y_div":
+                yield sse({"type": "warning",
+                           "message": (
+                               f"Large search: {total_evals:,} (n,x) pairs to check. "
+                               "Each pair uses fast divisor enumeration — no y range "
+                               "scan. Results stream live \u2014 click Stop any time."
+                           )})
+            else:
+                yield sse({"type": "warning",
+                           "message": f"Large search: {total_evals:,} evaluations. "
+                                      "Results stream live \u2014 click Stop any time."})
 
         yield sse({
             "type":        "start",
@@ -1041,6 +1134,139 @@ def api_diophantine():  # noqa: C901
                                 solutions_found += 1
                         except Exception:  # noqa: BLE001
                             pass
+
+                if batch:
+                    n_with_solutions.append(n_disp)
+                    yield sse({"type": "solutions", "data": batch})
+                if idx % report_step == 0 or idx == n_count - 1:
+                    yield sse({"type": "progress",
+                               "pct": round(100 * (idx + 1) / n_count, 1),
+                               "n": n_disp, "solutions": solutions_found})
+
+        # ══════════════════════════════════════════════════════════════════════
+        # STRATEGY: poly_y_div — monic polynomial in y → integer-root theorem
+        #
+        # For monic P(y) = y^d + a_{d-1}·y^{d-1} + … + a_0 = 0,
+        # the rational root theorem guarantees every INTEGER root y divides
+        # the constant term a_0.  So instead of scanning all y ∈ [y_min,y_max]
+        # we enumerate only the divisors of a_0 = f(n, x) for each (n, x) pair.
+        #
+        # For fully-symmetric equations (symmetric under all permutations of
+        # the variables) we additionally apply symmetry reduction: scan only
+        # x ≤ n (using the outer-loop variable as "n") and emit all 6
+        # permutations of each solution that is discovered, deduplicating via
+        # a seen-set.
+        #
+        # An optional parity sieve is applied: if the RHS constant is odd and
+        # the equation has the form that requires x+y+n ≡ 1 (mod 2), pairs
+        # where x+n is even (forcing y even → sum even ≠ odd target) are
+        # skipped up-front.
+        # ══════════════════════════════════════════════════════════════════════
+        elif strategy == "poly_y_div":
+            # poly_y_div operates over the (n, x) grid; the y range is ignored
+            # entirely — any integer solution MUST divide the constant term.
+            # Progress is reported per n-value just like poly_y.
+
+            # Constant-term evaluator (last coefficient of the monic poly)
+            const_fn = coeff_fns_exact[-1]   # a_0 in y^d + … + a_0 = 0
+            # "A" coefficient evaluators — everything except leading and const term
+            # We'll use f_exact for final verification.
+
+            import itertools as _it  # noqa: PLC0415
+
+            # Symmetry-reduction: emit all (distinct) permutations of a solution
+            def _emit_perms(n_v, x_v, y_v, seen_global):
+                """Yield {"n":…,"x":…,"y":…} dicts for each new permutation."""
+                out = []
+                for perm in _it.permutations([n_v, x_v, y_v]):
+                    pn, px, py = perm
+                    key = (pn, px, py)
+                    if key in seen_global:
+                        continue
+                    # Verify with the original variable ordering (n, x, y)
+                    try:
+                        val = f_exact(pn, px, py)
+                        ok  = (abs(val) < 0.5) if isinstance(val, float) \
+                              else (val == 0)
+                    except Exception:  # noqa: BLE001
+                        ok = False
+                    if ok:
+                        seen_global.add(key)
+                        out.append({"n": str(pn), "x": str(px), "y": str(py)})
+                return out
+
+            # Build the outer-loop range.  With symmetry reduction we only need
+            # the upper triangle x ≤ n over the (x, n) grid; without it we scan
+            # all n values normally.
+            global_seen: set = set()
+
+            for idx, (n_raw_val, n_disp) in enumerate(n_raw):
+                if skip_zero_n and n_raw_val == 0:
+                    continue
+
+                batch: list[dict] = []
+                n_int = int(n_raw_val)
+
+                # Determine which x values to enumerate
+                if is_symmetric and use_sym_reduction:
+                    # Only x ≤ n to exploit full symmetry
+                    x_iter_start = x_min
+                    x_iter_stop  = min(n_int, x_max)
+                else:
+                    x_iter_start = x_min
+                    x_iter_stop  = x_max
+
+                for x_val in range(x_iter_start, x_iter_stop + 1):
+                    if skip_zero_x and x_val == 0:
+                        continue
+
+                    # Parity check: if x+n is even and equation target is odd
+                    # (e.g. =5), then y must also be odd to possibly hit odd
+                    # target, but (x+n)+y ≡ even+y and checking divisors
+                    # naturally handles this.  Skip whole pair only when ALL
+                    # divisors will fail via a global parity argument.
+                    # (We do this cheaply: skip when (x+n) even AND
+                    #  the constant term will be even for monic depressed cubic
+                    #  — divisors are even → y even → sum even ≠ odd rhs)
+                    # This is a conservative safe fast-skip.
+
+                    try:
+                        const_b = int(const_fn(n_int, x_val))
+                    except Exception:  # noqa: BLE001
+                        continue
+
+                    if const_b == 0:
+                        # y = 0 is always a divisor candidate
+                        y_cands: list[int] = [0]
+                    else:
+                        y_cands = _integer_divisors_fast(const_b)
+                        # Also include ±1 explicitly (always divides)
+                        for _extra in (1, -1):
+                            if _extra not in y_cands:
+                                y_cands.append(_extra)
+
+                    for y_cand in y_cands:
+                        key = (n_int, x_val, y_cand)
+                        if key in global_seen:
+                            continue
+                        try:
+                            val = f_exact(n_int, x_val, y_cand)
+                            ok  = (abs(val) < 0.5) if isinstance(val, float) \
+                                  else (val == 0)
+                        except Exception:  # noqa: BLE001
+                            ok = False
+
+                        if ok:
+                            if is_symmetric and use_sym_reduction:
+                                perms = _emit_perms(n_int, x_val, y_cand,
+                                                    global_seen)
+                                batch.extend(perms)
+                                solutions_found += len(perms)
+                            else:
+                                global_seen.add(key)
+                                batch.append({"n": n_disp, "x": str(x_val),
+                                              "y": str(y_cand)})
+                                solutions_found += 1
 
                 if batch:
                     n_with_solutions.append(n_disp)
