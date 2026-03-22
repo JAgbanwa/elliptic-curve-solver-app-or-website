@@ -37,8 +37,9 @@ like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.
 - **N Summary panel** — see all n-values with integral points at a glance
 - **Live streaming** via Server-Sent Events (SSE)
 - **Table grouped by n** with collapsible invariant cards
-- **CSV export**
-- **17 built-in examples** spanning both solver modes
+- **CSV & PDF export** — download results as a spreadsheet or print to PDF
+- **Light / Dark mode** — toggle in the header; remembers your preference via localStorage
+- **18 built-in examples** spanning both solver modes
 
 ---
 
