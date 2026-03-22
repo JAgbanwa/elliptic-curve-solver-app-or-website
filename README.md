@@ -1,5 +1,7 @@
 # Elliptic Curve & Diophantine Equation Solver
 
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A Flask web app for finding integer solutions to polynomial Diophantine equations.
 Supports the classical **y² = f(n, x)** elliptic-curve family mode **and** a
 fully general **F(x, y, n) = 0** mode for arbitrary polynomial equations
