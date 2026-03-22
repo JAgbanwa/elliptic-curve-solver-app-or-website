@@ -200,6 +200,19 @@ const genYMinIn      = document.getElementById("gen-y-min");
 const genYMaxIn      = document.getElementById("gen-y-max");
 const thVerify       = document.getElementById("th-verify");
 const btnThemeToggle = document.getElementById("btn-theme-toggle");
+// Unknowns sub-tab elements — EC mode
+const ecVarTabsEl      = document.getElementById("ec-var-tabs");
+const ecTab2Var        = document.getElementById("ec-tab-2var");
+const ecTab3Var        = document.getElementById("ec-tab-3var");
+const ecNSingleSection = document.getElementById("ec-n-single-section");
+const ecNSingleIn      = document.getElementById("ec-n-single");
+const nRangeSection    = document.getElementById("n-range-section");
+// Unknowns sub-tab elements — Gen mode
+const genTab2Var       = document.getElementById("gen-tab-2var");
+const genTab3Var       = document.getElementById("gen-tab-3var");
+const genYRangeSection = document.getElementById("gen-y-range-section");
+const ecEqLabelVars    = document.getElementById("ec-eq-label-vars");
+const genEqLabelVars   = document.getElementById("gen-eq-label-vars");
 
 /* ═══════════════════════════════════════════════════════════════════════════
    THEME
@@ -244,6 +257,8 @@ let rowIndex    = 0;      // global row counter for table
 let nTotalCount = 0;      // total n-values in last search (for n-summary)
 let lastGroupN  = null;   // n-value of the current table group header
 let currentSolverMode = "ec";  // "ec" | "gen"
+let ecVarMode  = "3var";       // "2var" | "3var"  — for y² = f mode
+let genVarMode = "3var";       // "2var" | "3var"  — for General Diophantine
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LATEX PREVIEW
@@ -437,11 +452,12 @@ function escHtml(s) {
 }
 
 function buildSearchURL() {
+  const ec2var = ecVarMode === "2var";
   const p = new URLSearchParams({
     expr:    exprInput.value.trim(),
-    n_min:   nMinIn.value,
-    n_max:   nMaxIn.value,
-    n_denom: nDenomIn.value,
+    n_min:   ec2var ? ecNSingleIn.value : nMinIn.value,
+    n_max:   ec2var ? ecNSingleIn.value : nMaxIn.value,
+    n_denom: ec2var ? "1"               : nDenomIn.value,
   });
   const mode = xModeSelect.value;
   if (mode === "autoscale") {
@@ -687,15 +703,54 @@ function switchSolverMode(mode) {
   ecExprSection.style.display = isEC ? "" : "none";
   ecXSection.style.display    = isEC ? "" : "none";
   genInputs.style.display     = isEC ? "none" : "";
+  if (ecVarTabsEl) ecVarTabsEl.style.display = isEC ? "" : "none";
   tabEC.classList.toggle("active", isEC);
   tabGen.classList.toggle("active", !isEC);
   if (thVerify) thVerify.textContent =
     isEC ? "Verify\u00a0(y\u00b2\u00a0=\u00a0f(n,x))" : "Verify\u00a0(F\u00a0=\u00a00)";
+  // Sync single-n / n-range visibility with the current EC var mode
+  if (isEC) {
+    if (ecNSingleSection) ecNSingleSection.style.display = ecVarMode === "2var" ? "" : "none";
+    if (nRangeSection)    nRangeSection.style.display    = ecVarMode === "2var" ? "none" : "";
+  } else {
+    if (ecNSingleSection) ecNSingleSection.style.display = "none";
+    if (nRangeSection)    nRangeSection.style.display    = "";
+  }
   clearResults();
 }
 
 tabEC.addEventListener("click",  () => switchSolverMode("ec"));
 tabGen.addEventListener("click", () => switchSolverMode("gen"));
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UNKNOWNS COUNT SUB-TABS
+   ═══════════════════════════════════════════════════════════════════════════ */
+function switchECVarMode(mode) {
+  ecVarMode = mode;
+  const is2var = mode === "2var";
+  if (ecNSingleSection) ecNSingleSection.style.display = is2var ? "" : "none";
+  if (nRangeSection)    nRangeSection.style.display    = is2var ? "none" : "";
+  if (ecTab2Var) ecTab2Var.classList.toggle("active", is2var);
+  if (ecTab3Var) ecTab3Var.classList.toggle("active", !is2var);
+  if (ecEqLabelVars) ecEqLabelVars.textContent = is2var ? "f(x)" : "f(n, x)";
+  clearResults();
+}
+
+function switchGenVarMode(mode) {
+  genVarMode = mode;
+  const is3var = mode === "3var";
+  if (genYRangeSection) genYRangeSection.style.display = is3var ? "" : "none";
+  if (genTab2Var) genTab2Var.classList.toggle("active", !is3var);
+  if (genTab3Var) genTab3Var.classList.toggle("active", is3var);
+  if (genEqLabelVars) genEqLabelVars.innerHTML =
+    is3var ? "F(n,&thinsp;x,&thinsp;y)" : "F(n,&thinsp;x)";
+  clearResults();
+}
+
+ecTab2Var.addEventListener("click",  () => switchECVarMode("2var"));
+ecTab3Var.addEventListener("click",  () => switchECVarMode("3var"));
+genTab2Var.addEventListener("click", () => switchGenVarMode("2var"));
+genTab3Var.addEventListener("click", () => switchGenVarMode("3var"));
 
 /* LaTeX preview for general Diophantine equation */
 let genPreviewTimer = null;
@@ -818,6 +873,7 @@ EXAMPLES.forEach((ex) => {
     // ── General Diophantine mode ──────────────────────────────────────────
     if (ex.solverMode === "gen") {
       switchSolverMode("gen");
+      switchGenVarMode(/\by\b/.test(ex.eq || "") ? "3var" : "2var");
       genEqIn.value   = ex.eq || "";
       nMinIn.value    = ex.nm ?? 0;
       nMaxIn.value    = ex.nx ?? 0;
@@ -834,6 +890,7 @@ EXAMPLES.forEach((ex) => {
     }
     // ── y² = f(n,x) mode ─────────────────────────────────────────────────
     switchSolverMode("ec");
+    switchECVarMode("3var");
     exprInput.value = ex.expr;
     nMinIn.value    = ex.nm;
     nMaxIn.value    = ex.nx;

@@ -834,6 +834,38 @@ tbody td:first-child { color: var(--text-dim); font-size: .78rem; }
   color: #fff;
 }
 
+/* ── Variable count sub-tabs ─────────────────────────────────────────────── */
+.var-tabs {
+  display: flex;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.var-tab {
+  flex: 1;
+  padding: 7px 10px;
+  background: var(--bg);
+  color: var(--text-dim);
+  border: none;
+  cursor: pointer;
+  font-size: .75rem;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background .15s, color .15s;
+  text-align: center;
+  line-height: 1.35;
+}
+.var-tab:not(:last-child) { border-right: 1px solid var(--border); }
+.var-tab:hover { background: var(--surface2); color: var(--text); }
+.var-tab.active {
+  background: var(--surface2);
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent);
+}
+.var-tab strong { display: block; font-size: .78rem; margin-bottom: 1px; }
+
 /* ── General Diophantine example badge ────────────────────────────────────── */
 .example-mode-badge {
   display: inline-block;

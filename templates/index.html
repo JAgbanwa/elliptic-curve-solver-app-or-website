@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=4" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=5" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -114,11 +114,21 @@
         <button id="tab-gen" class="solver-tab" type="button">General Diophantine</button>
       </div>
 
+      <!-- EC: unknowns sub-tabs (hidden in Gen mode) -->
+      <div class="var-tabs" id="ec-var-tabs">
+        <button class="var-tab" id="ec-tab-2var" type="button">
+          <strong>2 unknowns</strong> y&#178;&nbsp;=&nbsp;f(x)
+        </button>
+        <button class="var-tab active" id="ec-tab-3var" type="button">
+          <strong>3 unknowns</strong> y&#178;&nbsp;=&nbsp;f(n,&thinsp;x)
+        </button>
+      </div>
+
       <!-- Curve expression (y² = f mode) -->
       <section class="param-section" id="ec-expr-section">
         <label class="param-label" for="expr-input">
           Right-hand side &nbsp;— &nbsp;
-          <span class="dim">y² = </span><strong>f(n, x)</strong>
+          <span class="dim">y² = </span><strong id="ec-eq-label-vars">f(n, x)</strong>
         </label>
         <input id="expr-input" class="text-input" type="text"
                placeholder="e.g. x**3 - n**2*x"
@@ -147,8 +157,16 @@
         </p>
       </section>
 
-      <!-- n range -->
-      <section class="param-section">
+      <!-- Single n value — EC 2-unknowns mode, hidden by default -->
+      <section class="param-section" id="ec-n-single-section" style="display:none">
+        <label class="param-label" for="ec-n-single">Fixed <em>n</em> value</label>
+        <input id="ec-n-single" class="num-input" type="text" inputmode="numeric"
+               value="1" autocomplete="off" />
+        <p class="hint">n is treated as a known constant — only x and y are the two unknowns being searched.</p>
+      </section>
+
+      <!-- n range — EC 3-unknowns mode &amp; Gen modes -->
+      <section class="param-section" id="n-range-section">
         <div class="range-group">
           <div class="range-field">
             <label class="param-label" for="n-min">n&nbsp;min</label>
@@ -334,9 +352,18 @@
 
       <!-- ─── GENERAL DIOPHANTINE INPUTS (hidden by default) ───────────── -->
       <section id="gen-inputs" class="param-section" style="display:none">
+        <!-- Gen: unknowns sub-tabs -->
+        <div class="var-tabs" id="gen-var-tabs" style="margin-bottom:14px">
+          <button class="var-tab" id="gen-tab-2var" type="button">
+            <strong>2 unknowns</strong> F(n,&thinsp;x)&nbsp;=&nbsp;0
+          </button>
+          <button class="var-tab active" id="gen-tab-3var" type="button">
+            <strong>3 unknowns</strong> F(n,&thinsp;x,&thinsp;y)&nbsp;=&nbsp;0
+          </button>
+        </div>
         <label class="param-label" for="gen-eq-input">
           Full equation &nbsp;—&nbsp;
-          <strong>F(n,&thinsp;x,&thinsp;y)</strong>
+          <strong id="gen-eq-label-vars">F(n,&thinsp;x,&thinsp;y)</strong>
         </label>
         <input id="gen-eq-input" class="text-input" type="text"
                placeholder="e.g. y**3 - y = x**4 - 2*x - 2"
@@ -380,6 +407,7 @@
           </div>
         </div>
         <!-- y range — used only for non-polynomial-in-y (brute-force 3D) equations -->
+        <div id="gen-y-range-section">
         <div class="range-group" style="margin-top:6px">
           <div class="range-field">
             <label class="param-label" for="gen-y-min">
@@ -404,6 +432,7 @@
           n range above still applies — set n&thinsp;min&nbsp;=&nbsp;n&thinsp;max&nbsp;=&nbsp;0
           when the equation has no&nbsp;<em>n</em>.
         </p>
+        </div><!-- /gen-y-range-section -->
       </section>
 
       <!-- Skip-zero filter -->
@@ -586,6 +615,6 @@
     </div>
   </footer>
 
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=4"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=5"></script>
 </body>
 </html>
