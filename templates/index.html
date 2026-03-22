@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=7" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=8" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -210,11 +210,11 @@
           <div class="range-group">
             <div class="range-field">
               <label class="param-label" for="x-min">x&nbsp;min</label>
-              <input id="x-min" class="num-input" type="number" value="-100" />
+              <input id="x-min" class="num-input" type="number" value="-1000" />
             </div>
             <div class="range-field">
               <label class="param-label" for="x-max">x&nbsp;max</label>
-              <input id="x-max" class="num-input" type="number" value="100" />
+              <input id="x-max" class="num-input" type="number" value="1000" />
             </div>
           </div>
           <p class="hint">x is always searched over integers. Results stream live. Use <strong>Stop</strong> any time.</p>
@@ -317,13 +317,13 @@
               </span>
             </span>
           </label>
-          <input id="x-start-expr" class="text-input" type="text" value="-100"
+          <input id="x-start-expr" class="text-input" type="text" value="-1000"
                  spellcheck="false" autocomplete="off"
                  placeholder="e.g. n**2  or  10**15" />
           <label class="param-label" style="margin-top:8px" for="x-end-expr">
             x end (expression in n)
           </label>
-          <input id="x-end-expr" class="text-input" type="text" value="100"
+          <input id="x-end-expr" class="text-input" type="text" value="1000"
                  spellcheck="false" autocomplete="off"
                  placeholder="e.g. n**2 + 1000  or  10**15 + 10**6" />
           <label class="param-label" style="margin-top:8px" for="x-step-expr">
@@ -421,11 +421,11 @@
                 </span>
               </span>
             </label>
-            <input id="gen-y-min" class="num-input" type="number" value="-100" />
+            <input id="gen-y-min" class="num-input" type="number" value="-1000" />
           </div>
           <div class="range-field">
             <label class="param-label" for="gen-y-max">y&nbsp;max</label>
-            <input id="gen-y-max" class="num-input" type="number" value="100" />
+            <input id="gen-y-max" class="num-input" type="number" value="1000" />
           </div>
         </div>
         <p class="hint" style="margin-top:6px">
@@ -615,6 +615,6 @@
     </div>
   </footer>
 
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=7"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=8"></script>
 </body>
 </html>

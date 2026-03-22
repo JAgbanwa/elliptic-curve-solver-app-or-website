@@ -883,10 +883,10 @@ EXAMPLES.forEach((ex) => {
       nMinIn.value    = ex.nm ?? 0;
       nMaxIn.value    = ex.nx ?? 0;
       nDenomIn.value  = ex.nd ?? 1;
-      genXMinIn.value = ex.xm ?? -50;
-      genXMaxIn.value = ex.xx ?? 50;
-      genYMinIn.value = ex.ym ?? -100;
-      genYMaxIn.value = ex.yx ?? 100;
+      genXMinIn.value = ex.xm ?? -1000;
+      genXMaxIn.value = ex.xx ?? 1000;
+      genYMinIn.value = ex.ym ?? -1000;
+      genYMaxIn.value = ex.yx ?? 1000;
       skipZeroNChk.checked = !!ex.skipZeroN;
       skipZeroXChk.checked = !!ex.skipZeroX;
       renderGenPreview(ex.eq || "");
@@ -921,8 +921,8 @@ EXAMPLES.forEach((ex) => {
       xEndExprIn.value   = ex.xEndExpr   || "100";
       xStepExprIn.value  = ex.xStepExpr  || "1";
     } else {
-      xMinIn.value = ex.xm ?? -100;
-      xMaxIn.value = ex.xx ?? 100;
+      xMinIn.value = ex.xm ?? -1000;
+      xMaxIn.value = ex.xx ?? 1000;
     }
     skipZeroNChk.checked = !!ex.skipZeroN;
     skipZeroXChk.checked = !!ex.skipZeroX;
