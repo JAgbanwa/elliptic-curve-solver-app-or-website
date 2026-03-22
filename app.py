@@ -1163,27 +1163,33 @@ def api_diophantine():  # noqa: C901
         # skipped up-front.
         # ══════════════════════════════════════════════════════════════════════
         elif strategy == "poly_y_div":
-            # poly_y_div operates over the (n, x) grid; the y range is ignored
-            # entirely — any integer solution MUST divide the constant term.
-            # Progress is reported per n-value just like poly_y.
+            # poly_y_div: fast monic-polynomial root finder.
+            #
+            # PRIMARY: use numpy.roots() (same as poly_y) to get approximate
+            #   real roots in O(1) per (n,x) pair — no y range scan.
+            # SECONDARY: for small |B| (constant term ≤ DIV_THRESHOLD), also
+            #   enumerate exact integer divisors of B as additional candidates.
+            #   This catches solutions that floating-point rounding may miss.
+            # VERIFY: all candidates are confirmed with exact Python integer math.
+            # SYMMETRY: when is_symmetric and use_sym_reduction, scan only x≤n
+            #   and emit all 6 permutations of each confirmed solution.
 
-            # Constant-term evaluator (last coefficient of the monic poly)
-            const_fn = coeff_fns_exact[-1]   # a_0 in y^d + … + a_0 = 0
-            # "A" coefficient evaluators — everything except leading and const term
-            # We'll use f_exact for final verification.
+            DIV_THRESHOLD = 10 ** 9   # |B| ≤ this → also enumerate divisors
 
             import itertools as _it  # noqa: PLC0415
 
-            # Symmetry-reduction: emit all (distinct) permutations of a solution
+            # Constant-term evaluator (last coefficient of the monic poly)
+            const_fn        = coeff_fns_exact[-1]   # a_0 in y^d + … + a_0 = 0
+            const_fn_flt    = coeff_fns_flt[-1]     # float version for numpy
+
+            # Symmetry-reduction helper: emit all distinct valid permutations.
             def _emit_perms(n_v, x_v, y_v, seen_global):
-                """Yield {"n":…,"x":…,"y":…} dicts for each new permutation."""
                 out = []
                 for perm in _it.permutations([n_v, x_v, y_v]):
                     pn, px, py = perm
                     key = (pn, px, py)
                     if key in seen_global:
                         continue
-                    # Verify with the original variable ordering (n, x, y)
                     try:
                         val = f_exact(pn, px, py)
                         ok  = (abs(val) < 0.5) if isinstance(val, float) \
@@ -1195,9 +1201,6 @@ def api_diophantine():  # noqa: C901
                         out.append({"n": str(pn), "x": str(px), "y": str(py)})
                 return out
 
-            # Build the outer-loop range.  With symmetry reduction we only need
-            # the upper triangle x ≤ n over the (x, n) grid; without it we scan
-            # all n values normally.
             global_seen: set = set()
 
             for idx, (n_raw_val, n_disp) in enumerate(n_raw):
@@ -1205,46 +1208,55 @@ def api_diophantine():  # noqa: C901
                     continue
 
                 batch: list[dict] = []
-                n_int = int(n_raw_val)
+                n_int   = int(n_raw_val)
+                n_float = float(n_raw_val)
 
-                # Determine which x values to enumerate
-                if is_symmetric and use_sym_reduction:
-                    # Only x ≤ n to exploit full symmetry
-                    x_iter_start = x_min
-                    x_iter_stop  = min(n_int, x_max)
-                else:
-                    x_iter_start = x_min
-                    x_iter_stop  = x_max
+                x_iter_start = x_min
+                x_iter_stop  = min(n_int, x_max) if (is_symmetric and use_sym_reduction) \
+                                else x_max
 
                 for x_val in range(x_iter_start, x_iter_stop + 1):
                     if skip_zero_x and x_val == 0:
                         continue
 
-                    # Parity check: if x+n is even and equation target is odd
-                    # (e.g. =5), then y must also be odd to possibly hit odd
-                    # target, but (x+n)+y ≡ even+y and checking divisors
-                    # naturally handles this.  Skip whole pair only when ALL
-                    # divisors will fail via a global parity argument.
-                    # (We do this cheaply: skip when (x+n) even AND
-                    #  the constant term will be even for monic depressed cubic
-                    #  — divisors are even → y even → sum even ≠ odd rhs)
-                    # This is a conservative safe fast-skip.
+                    x_float = float(x_val)
 
+                    # ── Fast path: numpy.roots for approximate real roots ──
+                    y_cands: set[int] = set()
+                    try:
+                        flt_c: list[float] = []
+                        for cf in coeff_fns_flt:
+                            v = cf(n_float, x_float)
+                            flt_c.append(
+                                float(v) if np.isscalar(v)
+                                else float(np.asarray(v).flat[0])
+                            )
+                        while len(flt_c) > 1 and flt_c[0] == 0.0:
+                            flt_c.pop(0)
+                        if len(flt_c) >= 2:
+                            approx_roots = np.roots(flt_c)
+                            for r in approx_roots:
+                                if abs(r.imag) < 0.5:
+                                    yr = r.real
+                                    y_cands.add(math.floor(yr))
+                                    y_cands.add(math.ceil(yr))
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                    # ── Divisor path: exact enumeration for small |B| ──
                     try:
                         const_b = int(const_fn(n_int, x_val))
                     except Exception:  # noqa: BLE001
-                        continue
+                        const_b = None
 
-                    if const_b == 0:
-                        # y = 0 is always a divisor candidate
-                        y_cands: list[int] = [0]
-                    else:
-                        y_cands = _integer_divisors_fast(const_b)
-                        # Also include ±1 explicitly (always divides)
-                        for _extra in (1, -1):
-                            if _extra not in y_cands:
-                                y_cands.append(_extra)
+                    if const_b is not None:
+                        if const_b == 0:
+                            y_cands.add(0)
+                        elif abs(const_b) <= DIV_THRESHOLD:
+                            for d in _integer_divisors_fast(const_b):
+                                y_cands.add(d)
 
+                    # ── Verify each candidate with exact integer arithmetic ──
                     for y_cand in y_cands:
                         key = (n_int, x_val, y_cand)
                         if key in global_seen:
