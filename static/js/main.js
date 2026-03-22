@@ -703,22 +703,54 @@ function buildDiophURL() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   CSV EXPORT
+   EXPORT  (CSV + PDF)
    ═══════════════════════════════════════════════════════════════════════════ */
+const btnExportPdf = document.getElementById("btn-export-pdf");
+
+function buildExportMeta() {
+  const isGen = currentSolverMode === "gen";
+  const eqStr = isGen ? genEqIn.value.trim() : `y\u00b2 = ${exprInput.value.trim()}`;
+  return { isGen, eqStr };
+}
+
+/* ── CSV ── */
 btnExport.addEventListener("click", () => {
   if (!allSolutions.length) return;
-  const isGen  = currentSolverMode === "gen";
-  const eqStr  = isGen ? genEqIn.value.trim() : exprInput.value.trim();
+  const { isGen, eqStr } = buildExportMeta();
+  const rawEq = isGen ? genEqIn.value.trim() : exprInput.value.trim();
   const header = isGen ? "n,x,y,equation\n" : "n,x,y,curve_expr\n";
   const rows = allSolutions
-    .map(({ n, x, y }) => `${n},${x},${y},"${eqStr.replace(/"/g, '""')}"`)
+    .map(({ n, x, y }) => `${n},${x},${y},"${rawEq.replace(/"/g, '""')}"`)
     .join("\n");
   const blob = new Blob([header + rows], { type: "text/csv" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "elliptic_curve_solutions.csv";
+  a.download = "diophantine_solutions.csv";
   a.click();
   URL.revokeObjectURL(a.href);
+});
+
+/* ── PDF (browser print-to-PDF) ── */
+btnExportPdf.addEventListener("click", () => {
+  if (!allSolutions.length) return;
+  const { eqStr } = buildExportMeta();
+  const date = new Date().toLocaleString();
+  const count = allSolutions.length;
+
+  // Inject a print-only header element above the table
+  let hdr = document.getElementById("print-header");
+  if (!hdr) {
+    hdr = document.createElement("div");
+    hdr.id = "print-header";
+    hdr.style.display = "none";   // hidden on screen; shown via @media print
+    const tableWrapEl = document.getElementById("table-wrap");
+    tableWrapEl.parentNode.insertBefore(hdr, tableWrapEl);
+  }
+  hdr.innerHTML =
+    `<h2>Solutions &mdash; ${escHtml(eqStr)}</h2>` +
+    `<p>${escHtml(count.toLocaleString())} integer point${count !== 1 ? "s" : ""} found &nbsp;&bull;&nbsp; Generated ${escHtml(date)}</p>`;
+
+  window.print();
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
