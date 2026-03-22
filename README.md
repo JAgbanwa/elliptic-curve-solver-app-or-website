@@ -39,8 +39,13 @@ like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.
 - **N Summary panel** — see all n-values with integral points at a glance
 - **Live streaming** via Server-Sent Events (SSE)
 - **Table grouped by n** with collapsible invariant cards
-- **CSV, PDF & LaTeX export** — download results as a spreadsheet, print to PDF, or export a ready-to-compile `.tex` file with full search-parameter metadata (bounds, compute time, strategy, exhaustiveness statement)
-- **Light / Dark mode** — toggle in the header; remembers your preference via localStorage
+- **Curve visualization** — immediately after every search a 2D canvas chart appears showing the real locus of the equation and highlighting found integer points as red dots; the plot panel is **only shown when there is something to draw** (hidden for equations with no real branches or no y variable):
+  - **y² = f(n, x)** — both positive and negative branches traced over the search x-range
+  - **General polynomial in y** — all real root-branches traced via `numpy.roots()`
+  - **Non-polynomial y** (e.g. `x^y = n`) — integer points plotted as a scatter with a note explaining the curve shape is unavailable
+  - Caption identifies the strategy (`ec`, `poly_y`, `brute3`, …) so you always know what was drawn and why
+- **CSV, PDF & LaTeX export** — download results as a spreadsheet, print to PDF, or export a ready-to-compile `.tex` file with full search-parameter metadata (bounds, compute time, strategy, exhaustiveness statement); PDF export embeds the curve plot as a PNG image; LaTeX export includes a full `pgfplots` tikzpicture
+- **Light / Dark mode** — toggle in the header; remembers your preference via localStorage; curve colours re-render automatically on theme change
 - **21 built-in examples** spanning both solver modes — click any card to instantly load and run the search
 
 ---
@@ -77,6 +82,23 @@ The repo ships `Procfile` and `render.yaml` for one-click deployment:
 
 ---
 
+## Curve Visualization Coverage
+
+The plot panel's behaviour adapts to every equation type the solver handles:
+
+| Equation type | Curve drawn? | Integer points? | Panel shown? |
+|---|---|---|---|
+| **y² = f(n, x)** with real branches | ✅ Both ±√f branches | ✅ Red dots | ✅ |
+| **y² = f(n, x)** no real branches in range | — | — | Hidden |
+| **Gen poly_y** (polynomial in y) | ✅ All real root-branches | ✅ Red dots | ✅ |
+| **Gen poly_y** no real roots in range | — | — | Hidden |
+| **Gen brute3** (e.g. `x^y = n`, y in exponent) | — not polynomial | ✅ Scatter dots | ✅ with note |
+| **Gen brute2** (y absent, e.g. `x² = n`) | — no y axis | — | Hidden |
+
+The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `poly_y`, `poly_y_no_real`, `brute3`, `brute2`) so the frontend caption always explains what was drawn and why.
+
+---
+
 ## How It Works
 
 ### y² = f(n, x) mode
@@ -106,15 +128,17 @@ The repo ships `Procfile` and `render.yaml` for one-click deployment:
 
 ```
 .
-├── app.py                   # Flask backend — /api/search, /api/diophantine, /api/latex, /api/from_latex
+├── app.py                   # Flask backend — /api/search, /api/diophantine, /api/latex,
+│                            #   /api/from_latex, /api/plot (curve data + pgfplots)
 ├── Procfile                 # gunicorn command for Render / Heroku
 ├── render.yaml              # Render deployment config
 ├── requirements.txt
 ├── templates/
-│   └── index.html           # Single-page UI (two solver modes, KaTeX, hero section)
+│   └── index.html           # Single-page UI (two solver modes, KaTeX, hero section,
+│                            #   canvas curve plot, export buttons)
 └── static/
-    ├── css/main.css
-    └── js/main.js
+    ├── css/main.css         # Includes plot-section, legend and print/PDF plot styles
+    └── js/main.js           # loadPlot(), renderPlot(), _fmtNum(); LaTeX pgfplots export
 ```
 
 ---
