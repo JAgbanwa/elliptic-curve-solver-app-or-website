@@ -1080,6 +1080,14 @@ function _fmtNum(v) {
   return v.toFixed(1);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   EXPORT  (CSV + PDF + LaTeX)
+   ═══════════════════════════════════════════════════════════════════════════ */
+const btnExportPdf   = document.getElementById("btn-export-pdf");
+const btnExportLatex  = document.getElementById("btn-export-latex");
+const btnTogglePlot   = document.getElementById("btn-toggle-plot");
+const curveCanvas     = document.getElementById("curve-canvas");
+
 // Toggle plot visibility
 if (btnTogglePlot) {
   btnTogglePlot.addEventListener("click", () => {
@@ -1094,14 +1102,6 @@ if (btnTogglePlot) {
 
 // Re-render on window resize
 window.addEventListener("resize", () => { if (plotData) renderPlot(); });
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   EXPORT  (CSV + PDF + LaTeX)
-   ═══════════════════════════════════════════════════════════════════════════ */
-const btnExportPdf   = document.getElementById("btn-export-pdf");
-const btnExportLatex  = document.getElementById("btn-export-latex");
-const btnTogglePlot   = document.getElementById("btn-toggle-plot");
-const curveCanvas     = document.getElementById("curve-canvas");
 
 function buildExportMeta() {
   const isGen = currentSolverMode === "gen";
