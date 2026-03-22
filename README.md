@@ -4,7 +4,7 @@ A Flask web app for finding integer solutions to polynomial Diophantine equation
 Supports the classical **y² = f(n, x)** elliptic-curve family mode **and** a
 fully general **F(x, y, n) = 0** mode for arbitrary polynomial equations
 like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.  
-**[Live demo →](https://elliptic-curve-solver.onrender.com)**
+**[Live demo →].(http://localhost:5001/#examples)**
 
 ---
 
