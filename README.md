@@ -175,3 +175,7 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
 - Production: gunicorn, `debug=False`, `PORT` from environment
 
 ---
+
+This tool is free and open forever. Improvements welcome — feel free to open issues or PRs!
+
+
