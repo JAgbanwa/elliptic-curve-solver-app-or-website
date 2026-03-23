@@ -229,11 +229,11 @@ function _applyThemeBtn(theme) {
   const label = btnThemeToggle.querySelector(".theme-label");
   if (theme === "light") {
     if (icon)  icon.textContent  = "\uD83C\uDF19"; // 🌙
-    if (label) label.textContent = "Dark mode";
+    if (label) label.textContent = (typeof t === "function") ? t("theme-dark")  : "Dark mode";
     btnThemeToggle.title = "Switch to dark mode";
   } else {
     if (icon)  icon.textContent  = "\u2600\uFE0F"; // ☀️
-    if (label) label.textContent = "Light mode";
+    if (label) label.textContent = (typeof t === "function") ? t("theme-light") : "Light mode";
     btnThemeToggle.title = "Switch to light mode";
   }
 }
@@ -261,6 +261,9 @@ let currentSolverMode = "ec";  // "ec" | "gen"
 let ecVarMode  = "3var";       // "2var" | "3var"  — for y² = f mode
 let genVarMode = "3var";       // "2var" | "3var"  — for General Diophantine
 let plotData    = null;   // last successful /api/plot response
+let viewport    = null;   // {xMin, xMax, yMin, yMax} — current zoom/pan view
+let showPointLabels = true;   // show (x,y) labels next to solution dots
+let _canvasEventsReady = false; // guard: interaction events attached once
 // Search metadata — captured at search start, used by PDF/LaTeX export
 let searchMeta = {};      // snapshot of search parameters
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -412,7 +415,7 @@ function clearResults() {
   lastGroupN   = null;
   nTotalCount  = 0;
   resultsBody.innerHTML = "";
-  solCount.textContent = "0 solutions";
+  solCount.textContent = "0 " + ((typeof t === "function") ? t("sol-plural") : "solutions");
   tableWrap.style.display = "none";
   emptyState.style.display = "none";
   progressArea.style.display = "none";
@@ -422,6 +425,7 @@ function clearResults() {
   const wb = document.getElementById("search-warning");
   if (wb) { wb.style.display = "none"; wb.textContent = ""; }
   plotData = null;
+  viewport = null;
   const ps = document.getElementById("plot-section");
   if (ps) ps.style.display = "none";
 }
@@ -446,7 +450,7 @@ function addRows(batch) {
       <td>${escHtml(String(n))}</td>
       <td>${escHtml(String(x))}</td>
       <td>${escHtml(String(y))}</td>
-      <td class="cell-valid">✓ verified</td>`;
+      <td class="cell-valid">${(typeof t === "function") ? t("cell-verified") : "✓ verified"}</td>`;
     resultsBody.appendChild(tr);
   });
   // keep newest in view
@@ -491,7 +495,7 @@ function startSearch() {
   if (evtSource) { evtSource.close(); evtSource = null; }
 
   clearResults();
-  setStatus("Starting search…", "status-running");
+  setStatus((typeof t === "function") ? t("status-starting") : "Starting search…", "status-running");
   progressArea.style.display = "block";
   btnSearch.disabled = true;
   btnStop.disabled   = false;
@@ -597,8 +601,8 @@ function startSearch() {
         if (!msg.data || !msg.data.length) break;
         tableWrap.style.display = "block";
         addRows(msg.data);
-        solCount.textContent =
-          `${allSolutions.length} solution${allSolutions.length !== 1 ? "s" : ""}`;
+        const _sp2 = (typeof t === "function") ? (allSolutions.length !== 1 ? t("sol-plural") : t("sol-singular")) : (allSolutions.length !== 1 ? "solutions" : "solution");
+        solCount.textContent = `${allSolutions.length} ${_sp2}`;
         break;
 
       case "curve_info": {
@@ -683,15 +687,18 @@ function startSearch() {
         if (allSolutions.length === 0) {
           emptyState.style.display  = "block";
           tableWrap.style.display  = "none";
-          setStatus("Search complete — no integer points found.", "status-done");
+          setStatus((typeof t === "function") ? t("status-no-results") : "Search complete — no integer points found.", "status-done");
         } else {
+          const _sp3 = (typeof t === "function") ? (allSolutions.length !== 1 ? t("sol-plural") : t("sol-singular")) : (allSolutions.length !== 1 ? "solutions" : "solution");
           setStatus(
-            `Done! Found ${allSolutions.length} integer point${allSolutions.length !== 1 ? "s" : ""}.`,
+            `${(typeof t === "function") ? t("done-found") || "Done! Found" : "Done! Found"} ${allSolutions.length} ${_sp3}.`,
             "status-done",
           );
         }
+        const _ts = msg.total_solutions;
+        const _tsp = (typeof t === "function") ? (_ts !== 1 ? t("sol-plural") : t("sol-singular")) : (_ts !== 1 ? "solutions" : "solution");
         progressStats.textContent =
-          `Complete — ${msg.total_solutions} total solution${msg.total_solutions !== 1 ? "s" : ""}.`;
+          `Complete — ${_ts} total ${_tsp}.`;
         setTimeout(loadPlot, 80);
         break;
 
@@ -699,7 +706,7 @@ function startSearch() {
         evtSource.close(); evtSource = null;
         btnSearch.disabled = false;
         btnStop.disabled   = true;
-        setStatus("Error: " + msg.message, "status-error");
+        setStatus((typeof t === "function") ? ("Error: " + msg.message) : ("Error: " + msg.message), "status-error");
         progressArea.style.display = "none";
         break;
     }
@@ -718,7 +725,7 @@ function startSearch() {
         evtSource = null;
         btnSearch.disabled = false;
         btnStop.disabled   = true;
-        setStatus("Connection error — search interrupted.", "status-error");
+        setStatus((typeof t === "function") ? t("status-conn-error") : "Connection error — search interrupted.", "status-error");
       }
     }, 0);
   };
@@ -728,7 +735,7 @@ function stopSearch() {
   if (evtSource) { evtSource.close(); evtSource = null; }
   btnSearch.disabled = false;
   btnStop.disabled   = true;
-  setStatus("Search stopped by user.", "status-idle");
+  setStatus((typeof t === "function") ? t("status-stopped") : "Search stopped by user.", "status-idle");
   progressFill.style.width = "0%";
 }
 
@@ -737,7 +744,7 @@ btnStop.addEventListener("click",   stopSearch);
 btnClear.addEventListener("click",  () => {
   stopSearch();
   clearResults();
-  setStatus('Enter a curve expression and click Run Search.', "status-idle");
+  setStatus((typeof t === "function") ? t('status-idle') : 'Enter a curve expression and click Run Search.', "status-idle");
 });
 
 xModeSelect.addEventListener("change", () => {
@@ -762,7 +769,7 @@ function switchSolverMode(mode) {
   tabEC.classList.toggle("active", isEC);
   tabGen.classList.toggle("active", !isEC);
   if (thVerify) thVerify.textContent =
-    isEC ? "Verify\u00a0(y\u00b2\u00a0=\u00a0f(n,x))" : "Verify\u00a0(F\u00a0=\u00a00)";
+    isEC ? (typeof t === "function" ? t("th-verify-ec") : "Verify\u00a0(y\u00b2\u00a0=\u00a0f(n,x))") : (typeof t === "function" ? t("th-verify-gen") : "Verify\u00a0(F\u00a0=\u00a00)");
   // Sync single-n / n-range visibility with the current EC var mode
   if (isEC) {
     if (ecNSingleSection) ecNSingleSection.style.display = ecVarMode === "2var" ? "" : "none";
@@ -844,7 +851,6 @@ function buildDiophURL() {
   });
   if (skipZeroNChk.checked) p.set("skip_zero_n", "1");
   if (skipZeroXChk.checked) p.set("skip_zero_x", "1");
-  if (document.getElementById("gen-sym-reduction")?.checked) p.set("sym_reduction", "1");
   return "/api/diophantine?" + p.toString();
 }
 
@@ -924,6 +930,9 @@ async function loadPlot() {
                        || data.sol_points.length  > 0;
       if (!hasAnything) return;
       plotData = data;
+      viewport = { xMin: data.x_min, xMax: data.x_max, yMin: data.y_min, yMax: data.y_max };
+      const _lblBtn = document.getElementById("btn-toggle-labels");
+      if (_lblBtn) _lblBtn.textContent = showPointLabels ? "Hide labels" : "Show labels";
       searchMeta.pgfplots = data.pgfplots;
       searchMeta.eqLatex  = data.eq_latex;
       const sec = document.getElementById("plot-section");
@@ -939,9 +948,10 @@ async function loadPlot() {
 
 /** Draw the curve + integer points on the canvas using the 2D API. */
 function renderPlot() {
-  if (!plotData) return;
+  if (!plotData || !viewport) return;
   const canvas = document.getElementById("curve-canvas");
   if (!canvas) return;
+  _setupCanvasInteraction();
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const container = canvas.parentElement;
@@ -960,8 +970,8 @@ function renderPlot() {
   const PW = W - PAD_L - PAD_R;
   const PH = H - PAD_T - PAD_B;
 
-  const { pos_segments, neg_segments, sol_points,
-          x_min, x_max, y_min, y_max } = plotData;
+  const { pos_segments, neg_segments, sol_points } = plotData;
+  const { xMin: x_min, xMax: x_max, yMin: y_min, yMax: y_max } = viewport;
 
   const isDark = document.documentElement.getAttribute("data-theme") !== "light";
   const tx = x => PAD_L + (x - x_min) / (x_max - x_min) * PW;
@@ -1022,8 +1032,13 @@ function renderPlot() {
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   ctx.fillText("y", PAD_L + 4, PAD_T - 10);
 
-  // Curve segments
+  // Curve segments (clipped to plot area)
   const curveColor = isDark ? "#60a5fa" : "#2563eb";
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(PAD_L, PAD_T, PW, PH);
+  ctx.clip();
+
   ctx.strokeStyle = curveColor;
   ctx.lineWidth   = 2;
   ctx.lineJoin    = "round";
@@ -1038,14 +1053,35 @@ function renderPlot() {
   for (const seg of pos_segments) drawSeg(seg);
   for (const seg of neg_segments) drawSeg(seg);
 
-  // Integer solution points
-  ctx.fillStyle   = "#ef4444";
-  ctx.strokeStyle = isDark ? "#161b22" : "#ffffff";
-  ctx.lineWidth   = 1.5;
+  // Integer solution points + labels (also clipped to plot area)
   for (const [sx, sy] of sol_points) {
-    const cx = tx(sx), cy_ = ty(sy);
-    ctx.beginPath(); ctx.arc(cx, cy_, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const px = tx(sx), py = ty(sy);
+    // dot
+    ctx.fillStyle   = "#ef4444";
+    ctx.strokeStyle = isDark ? "#161b22" : "#ffffff";
+    ctx.lineWidth   = 2;
+    ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // (x, y) label
+    if (showPointLabels) {
+      const lx = _fmtNum(sx), ly = _fmtNum(sy);
+      const label = `(${lx}, ${ly})`;
+      ctx.font = "bold 11px sans-serif";
+      const tw = ctx.measureText(label).width;
+      // position label: prefer above-right; nudge left if near right edge
+      const lpad = 4;
+      let lxPos = px + 8;
+      let lyPos = py - 10;
+      if (lxPos + tw + lpad > PAD_L + PW) lxPos = px - tw - 8;
+      // background pill for readability
+      ctx.fillStyle = isDark ? "rgba(22,27,34,0.82)" : "rgba(255,255,255,0.82)";
+      ctx.fillRect(lxPos - 2, lyPos - 11, tw + 4, 14);
+      ctx.fillStyle = isDark ? "#f0f6fc" : "#111827";
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      ctx.fillText(label, lxPos, lyPos);
+    }
   }
+
+  ctx.restore();
 
   // Plot border
   ctx.strokeStyle = isDark ? "#30363d" : "#d1d5db";
@@ -1075,10 +1111,135 @@ function renderPlot() {
 function _fmtNum(v) {
   if (!Number.isFinite(v)) return "";
   const a = Math.abs(v);
-  if (a >= 10000)  return v.toExponential(1);
-  if (a >= 100)    return Math.round(v).toString();
+  if (a >= 1e15)  return v.toExponential(2);
+  if (a >= 10000) return v.toExponential(1);
+  if (a >= 100)   return Math.round(v).toString();
   if (Number.isInteger(v)) return v.toString();
   return v.toFixed(1);
+}
+
+/** Zoom the current viewport in or out centered on the plot midpoint. */
+function _zoomCenter(factor) {
+  if (!viewport) return;
+  const cx = (viewport.xMin + viewport.xMax) / 2;
+  const cy = (viewport.yMin + viewport.yMax) / 2;
+  viewport = {
+    xMin: cx - (cx - viewport.xMin) * factor,
+    xMax: cx + (viewport.xMax - cx) * factor,
+    yMin: cy - (cy - viewport.yMin) * factor,
+    yMax: cy + (viewport.yMax - cy) * factor,
+  };
+  renderPlot();
+}
+
+/** Attach zoom/pan mouse & touch events to the canvas once. */
+function _setupCanvasInteraction() {
+  if (_canvasEventsReady) return;
+  const canvas = document.getElementById("curve-canvas");
+  if (!canvas) return;
+  _canvasEventsReady = true;
+
+  const _getPadding = () => ({ PAD_L: 54, PAD_R: 20, PAD_T: 24, PAD_B: 38 });
+
+  // ── Mouse-wheel zoom (centered on cursor) ──────────────────────────────
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    if (!viewport) return;
+    const rect          = canvas.getBoundingClientRect();
+    const W             = parseFloat(canvas.style.width)  || canvas.offsetWidth;
+    const H             = parseFloat(canvas.style.height) || canvas.offsetHeight;
+    const { PAD_L, PAD_R, PAD_T, PAD_B } = _getPadding();
+    const PW = W - PAD_L - PAD_R, PH = H - PAD_T - PAD_B;
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    // Only zoom when the cursor is inside the plot area
+    if (mx < PAD_L || mx > PAD_L + PW || my < PAD_T || my > PAD_T + PH) return;
+    const { xMin, xMax, yMin, yMax } = viewport;
+    const cx = xMin + (mx - PAD_L) / PW * (xMax - xMin);
+    const cy = yMax - (my - PAD_T) / PH * (yMax - yMin);
+    const factor = e.deltaY > 0 ? 1.25 : 0.8;
+    viewport = {
+      xMin: cx - (cx - xMin) * factor, xMax: cx + (xMax - cx) * factor,
+      yMin: cy - (cy - yMin) * factor, yMax: cy + (yMax - cy) * factor,
+    };
+    renderPlot();
+  }, { passive: false });
+
+  // ── Mouse drag — pan ────────────────────────────────────────────────────
+  let _drag = null;
+  canvas.style.cursor = "grab";
+
+  canvas.addEventListener("mousedown", (e) => {
+    if (!viewport || e.button !== 0) return;
+    _drag = { x: e.clientX, y: e.clientY, vp: { ...viewport } };
+    canvas.style.cursor = "grabbing";
+    e.preventDefault();
+  });
+
+  canvas.addEventListener("mousemove", (e) => {
+    if (!_drag) return;
+    const W  = parseFloat(canvas.style.width)  || canvas.offsetWidth;
+    const H  = parseFloat(canvas.style.height) || canvas.offsetHeight;
+    const { PAD_L, PAD_R, PAD_T, PAD_B } = _getPadding();
+    const PW = W - PAD_L - PAD_R, PH = H - PAD_T - PAD_B;
+    const { xMin, xMax, yMin, yMax } = _drag.vp;
+    const dx = (e.clientX - _drag.x) / PW * (xMax - xMin);
+    const dy = (e.clientY - _drag.y) / PH * (yMax - yMin);
+    viewport = { xMin: xMin - dx, xMax: xMax - dx, yMin: yMin + dy, yMax: yMax + dy };
+    renderPlot();
+  });
+
+  const _endDrag = () => { _drag = null; canvas.style.cursor = "grab"; };
+  canvas.addEventListener("mouseup",    _endDrag);
+  canvas.addEventListener("mouseleave", _endDrag);
+
+  // ── Touch — single-finger pan, two-finger pinch zoom ───────────────────
+  let _lastTouches = null;
+
+  canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    _lastTouches = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+  }, { passive: false });
+
+  canvas.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    if (!viewport || !_lastTouches) return;
+    const rect = canvas.getBoundingClientRect();
+    const W    = parseFloat(canvas.style.width)  || canvas.offsetWidth;
+    const H    = parseFloat(canvas.style.height) || canvas.offsetHeight;
+    const { PAD_L, PAD_R, PAD_T, PAD_B } = _getPadding();
+    const PW   = W - PAD_L - PAD_R, PH = H - PAD_T - PAD_B;
+    const cur  = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+    const { xMin, xMax, yMin, yMax } = viewport;
+
+    if (cur.length === 1 && _lastTouches.length >= 1) {
+      // Pan
+      const dx = (cur[0].x - _lastTouches[0].x) / PW * (xMax - xMin);
+      const dy = (cur[0].y - _lastTouches[0].y) / PH * (yMax - yMin);
+      viewport = { xMin: xMin - dx, xMax: xMax - dx, yMin: yMin + dy, yMax: yMax + dy };
+      renderPlot();
+    } else if (cur.length === 2 && _lastTouches.length === 2) {
+      // Pinch zoom
+      const oldD = Math.hypot(_lastTouches[0].x - _lastTouches[1].x,
+                              _lastTouches[0].y - _lastTouches[1].y);
+      const newD = Math.hypot(cur[0].x - cur[1].x, cur[0].y - cur[1].y);
+      if (oldD < 1) { _lastTouches = cur; return; }
+      const factor = oldD / newD;
+      const midX   = (cur[0].x + cur[1].x) / 2 - rect.left;
+      const midY   = (cur[0].y + cur[1].y) / 2 - rect.top;
+      const cx     = xMin + Math.max(0, midX - PAD_L) / PW * (xMax - xMin);
+      const cy     = yMax - Math.max(0, midY - PAD_T) / PH * (yMax - yMin);
+      viewport = {
+        xMin: cx - (cx - xMin) * factor, xMax: cx + (xMax - cx) * factor,
+        yMin: cy - (cy - yMin) * factor, yMax: cy + (yMax - cy) * factor,
+      };
+      renderPlot();
+    }
+    _lastTouches = cur;
+  }, { passive: false });
+
+  canvas.addEventListener("touchend", (e) => {
+    _lastTouches = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1096,8 +1257,35 @@ if (btnTogglePlot) {
     if (!pc) return;
     const hidden = pc.style.display === "none";
     pc.style.display = hidden ? "" : "none";
-    btnTogglePlot.textContent = hidden ? "Hide plot" : "Show plot";
+    btnTogglePlot.textContent = hidden
+      ? ((typeof t === "function") ? t("btn-toggle-plot-hide") : "Hide plot")
+      : ((typeof t === "function") ? t("btn-toggle-plot-show") : "Show plot");
     if (hidden && plotData) renderPlot();
+  });
+}
+
+// Zoom controls
+const btnZoomIn       = document.getElementById("btn-zoom-in");
+const btnZoomOut      = document.getElementById("btn-zoom-out");
+const btnZoomReset    = document.getElementById("btn-zoom-reset");
+const btnToggleLabels = document.getElementById("btn-toggle-labels");
+
+if (btnZoomIn)    btnZoomIn.addEventListener("click",    () => _zoomCenter(0.7));
+if (btnZoomOut)   btnZoomOut.addEventListener("click",   () => _zoomCenter(1 / 0.7));
+if (btnZoomReset) btnZoomReset.addEventListener("click", () => {
+  if (plotData) {
+    viewport = { xMin: plotData.x_min, xMax: plotData.x_max,
+                 yMin: plotData.y_min, yMax: plotData.y_max };
+    renderPlot();
+  }
+});
+if (btnToggleLabels) {
+  btnToggleLabels.addEventListener("click", () => {
+    showPointLabels = !showPointLabels;
+    btnToggleLabels.textContent = showPointLabels
+      ? ((typeof t === "function") ? t("btn-hide-labels") : "Hide labels")
+      : ((typeof t === "function") ? t("btn-show-labels") : "Show labels");
+    if (plotData) renderPlot();
   });
 }
 
@@ -1262,7 +1450,7 @@ btnExport.addEventListener("click", () => {
   const blob = new Blob([header + rows], { type: "text/csv" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "diophantine_solutions.csv";
+  a.download = (typeof t === "function") ? t("export-filename-csv") : "diophantine_solutions.csv";
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -1283,11 +1471,17 @@ btnExportPdf.addEventListener("click", () => {
     const tableWrapEl = document.getElementById("table-wrap");
     tableWrapEl.parentNode.insertBefore(hdr, tableWrapEl);
   }
+  const _intPts  = (typeof t === "function") ? t("export-int-points")    : "Integer Points";
+  const _gen     = (typeof t === "function") ? t("export-generated")     : "Generated";
+  const _solFnd  = (typeof t === "function") ? t("export-solutions-found") : "solution(s) found";
+  const _srchPrm = (typeof t === "function") ? t("export-search-params") : "Search parameters";
+  const _curvViz = (typeof t === "function") ? t("export-curve-viz")     : "Curve Visualization";
+
   hdr.innerHTML =
-    `<h2>Integer Points &mdash; ${escHtml(eqStr)}</h2>` +
-    `<p class="ph-generated">Generated: ${escHtml(date)} &nbsp;&bull;&nbsp; ` +
-    `${escHtml(count.toLocaleString())} solution${count !== 1 ? "s" : ""} found</p>` +
-    `<div class="ph-meta"><strong>Search parameters</strong><ul>` +
+    `<h2>${_intPts} &mdash; ${escHtml(eqStr)}</h2>` +
+    `<p class="ph-generated">${_gen}: ${escHtml(date)} &nbsp;&bull;&nbsp; ` +
+    `${escHtml(count.toLocaleString())} ${escHtml(_solFnd)}</p>` +
+    `<div class="ph-meta"><strong>${_srchPrm}</strong><ul>` +
     boundsLines.map(l => `<li>${escHtml(l)}</li>`).join("") +
     `</ul></div>`;
 
@@ -1297,7 +1491,7 @@ btnExportPdf.addEventListener("click", () => {
   if (_canvas && plotData && _plotSec && _plotSec.style.display !== "none") {
     const _imgData = _canvas.toDataURL("image/png");
     hdr.innerHTML +=
-      '<div class="ph-plot"><strong>Curve Visualization</strong>'
+      '<div class="ph-plot"><strong>' + ((typeof t === "function") ? t("export-curve-viz") : "Curve Visualization") + '</strong>'
       + '<br/><img class="ph-plot-img" src="' + _imgData + '"/></div>';
   }
   window.print();
@@ -1324,11 +1518,17 @@ btnExportLatex.addEventListener("click", () => {
       `  ${String(n).replace(/-/g, "$-$")} & ${String(x).replace(/-/g, "$-$")} & ${String(y).replace(/-/g, "$-$")} \\\\`)
     .join("\n");
 
+  const _secEq  = (typeof t === "function") ? t("latex-sec-equation")   || "Equation"  : "Equation";
+  const _secSP  = (typeof t === "function") ? t("latex-sec-search")     || "Search Parameters" : "Search Parameters";
+  const _secRes = (typeof t === "function") ? t("latex-sec-results")    || "Results"   : "Results";
+  const _secCV  = (typeof t === "function") ? t("latex-sec-curve")      || "Curve Visualization" : "Curve Visualization";
+  const _secNt  = (typeof t === "function") ? t("latex-sec-notes")      || "Notes"     : "Notes";
+
   const tex = `% Elliptic Curve Solver — Integer Points Report
 % Generated: ${date}
 \\documentclass[12pt,a4paper]{article}
 \\usepackage{amsmath,amssymb,booktabs,geometry,hyperref,pgfplots}
-\pgfplotsset{compat=1.18}
+\\pgfplotsset{compat=1.18}
 \\geometry{margin=25mm}
 \\hypersetup{colorlinks=true,urlcolor=blue}
 \\title{Integer Points on Diophantine Equation}
@@ -1337,17 +1537,17 @@ btnExportLatex.addEventListener("click", () => {
 \\begin{document}
 \\maketitle
 
-\\section*{Equation}
+\\section*{${_secEq}}
 \\[
   ${eqTex}
 \\]
 
-\\section*{Search Parameters}
+\\section*{${_secSP}}
 \\begin{itemize}
 ${boundsLines.map(l => `  \\item ${l}`).join("\n")}
 \\end{itemize}
 
-\\section*{Results}
+\\section*{${_secRes}}
 ${count === 0
   ? "\\textit{No integer solutions found within the stated bounds.}"
   : `${count.toLocaleString()} integer point${count !== 1 ? "s" : ""} found:
@@ -1362,12 +1562,12 @@ ${tableRows}
 \\end{tabular}
 \\end{center}`}
 
-\\section*{Curve Visualization}
+\\section*{${_secCV}}
 ${searchMeta.pgfplots
   ? `\\medskip\n${searchMeta.pgfplots}\n\\medskip`
   : '\\textit{(Plot not available.)}'}
 
-\\section*{Notes}
+\\section*{${_secNt}}
 \\begin{itemize}
   \\item All solutions listed have been verified by exact arithmetic.
   \\item The search is exhaustive within the bounds stated above;
@@ -1381,7 +1581,7 @@ ${searchMeta.pgfplots
   const blob = new Blob([tex], { type: "text/x-tex" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "diophantine_solutions.tex";
+  a.download = ((typeof t === "function") ? t("export-filename-tex") : "diophantine_solutions") + ".tex";
   a.click();
   URL.revokeObjectURL(a.href);
 });

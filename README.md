@@ -56,6 +56,10 @@ python3 app.py
   - **Non-polynomial y** (e.g. `x^y = n`) — integer points plotted as a scatter with a note explaining the curve shape is unavailable
   - Caption identifies the strategy (`ec`, `poly_y`, `brute3`, …) so you always know what was drawn and why
 - **CSV, PDF & LaTeX export** — download results as a spreadsheet, print to PDF, or export a ready-to-compile `.tex` file with full search-parameter metadata (bounds, compute time, strategy, exhaustiveness statement); PDF export embeds the curve plot as a PNG image; LaTeX export includes a full `pgfplots` tikzpicture
+- **Multi-language support (i18n)** — the entire UI, including hero section, controls, status messages, "How It Works", example cards, and export file headers/section names, can be switched to any of **8 languages** via the language selector in the header:
+  - 🌐 English, 🇳🇱 Nederlands, 🇫🇷 Français, 🇩🇪 Deutsch, 🇪🇸 Español, 🇧🇷 Português, 🇸🇦 العربية (with RTL), 🇨🇳 中文
+  - Exported CSV filenames, PDF headers, and LaTeX section titles are all translated to the selected language
+  - Language choice is saved in localStorage and remembered across sessions
 - **Light / Dark mode** — toggle in the header; remembers your preference via localStorage; curve colours re-render automatically on theme change
 - **21 built-in examples** spanning both solver modes — click any card to instantly load and run the search
 

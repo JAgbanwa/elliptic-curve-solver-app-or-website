@@ -1,0 +1,33 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Flask App",
+			"type": "shell",
+			"command": "pkill -f 'python3 app.py' 2>/dev/null; sleep 1; cd /Users/jamalmac/elliptic-curve-solver-app-or-website && python3 app.py 2>&1 | tee /tmp/flask_app.log",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Diagnose Flask",
+			"type": "shell",
+			"command": "python3 /tmp/diag_flask.py > /tmp/diag_out.txt 2>&1 && echo 'DONE' >> /tmp/diag_out.txt",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check Python",
+			"type": "shell",
+			"command": "python3 --version > /tmp/pycheck.txt 2>&1 && which python3 >> /tmp/pycheck.txt && pip3 list >> /tmp/pycheck.txt 2>&1",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Py Diag 2",
+			"type": "shell",
+			"command": "python3 --version > /Users/jamalmac/elliptic-curve-solver-app-or-website/_diag.txt 2>&1 && which python3 >> /Users/jamalmac/elliptic-curve-solver-app-or-website/_diag.txt && echo 'OK' >> /Users/jamalmac/elliptic-curve-solver-app-or-website/_diag.txt",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

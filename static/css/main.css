@@ -116,6 +116,20 @@ code { font-family: var(--font-mono); font-size: .87em;
 }
 .theme-icon { font-size: 1rem; line-height: 1; }
 
+/* ── Language selector ──────────────────────────────────────────────────── */
+.lang-select {
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: .82rem; font-weight: 600;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.lang-select:hover { border-color: var(--accent); background: var(--surface); }
+.lang-select:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ── Main grid ───────────────────────────────────────────────────────────── */
 .main-grid {
   flex: 1;
@@ -916,6 +930,20 @@ tbody td:first-child { color: var(--text-dim); font-size: .78rem; }
   font-family: var(--font-mono);
 }
 .plot-header .btn { margin-left: auto; }
+.plot-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.plot-toolbar-sep { flex: 1; }
+.btn.btn-xs {
+  padding: 2px 8px;
+  font-size: .75rem;
+  line-height: 1.5;
+}
 .plot-container {
   padding: 12px 14px 10px;
   display: flex;

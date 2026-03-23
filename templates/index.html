@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=14" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=16" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -48,17 +48,27 @@
       <div class="logo-group">
         <span class="logo-icon">∮</span>
         <div>
-          <h1 class="site-title">Elliptic Curve Solver</h1>
-          <p class="site-sub">Search for rational <em>n</em> where <strong>y² = f(n, x)</strong> has integer points</p>
+          <h1 class="site-title" data-i18n="site-title">Elliptic Curve Solver</h1>
+          <p class="site-sub" data-i18n="site-sub">Search for rational <em>n</em> where <strong>y² = f(n, x)</strong> has integer points</p>
         </div>
       </div>
       <nav class="header-nav">
-        <a class="nav-link" href="#how-it-works">How it works</a>
-        <a class="nav-link" href="#examples">Examples</a>
+        <a class="nav-link" href="#how-it-works" data-i18n="nav-how">How it works</a>
+        <a class="nav-link" href="#examples" data-i18n="nav-examples">Examples</a>
         <a class="nav-link btn-outline" href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">GitHub</a>
+        <select id="lang-select" class="lang-select" title="Select language" aria-label="Select language">
+          <option value="en">🌐 English</option>
+          <option value="nl">🇳🇱 Nederlands</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="es">🇪🇸 Español</option>
+          <option value="pt">🇧🇷 Português</option>
+          <option value="ar">🇸🇦 العربية</option>
+          <option value="zh">🇨🇳 中文</option>
+        </select>
         <button id="btn-theme-toggle" class="btn-theme-toggle" type="button" title="Switch to light mode" aria-label="Toggle theme">
           <span class="theme-icon">☀️</span>
-          <span class="theme-label">Light mode</span>
+          <span class="theme-label" data-i18n="theme-light">Light mode</span>
         </button>
       </nav>
     </div>
@@ -75,29 +85,29 @@
       <span class="hero-symbol s6">π</span>
     </div>
     <div class="hero-inner">
-      <div class="hero-badge">Number Theory Tool</div>
-      <h1 class="hero-title">
+      <div class="hero-badge" data-i18n="hero-badge">Number Theory Tool</div>
+      <h1 class="hero-title" data-i18n-html="hero-title-html">
         Find where&nbsp;
         <span class="hero-eq">y² = f(n, x)</span>
         <br />has integer points
       </h1>
-      <p class="hero-sub">
+      <p class="hero-sub" data-i18n-html="hero-sub-html">
         Define any parametric elliptic curve family, set your search range, and watch
         integer solutions stream to your browser in real time — powered by NumPy,
         SymPy, and Server-Sent Events.
       </p>
       <div class="hero-actions">
-        <a href="#app" class="btn btn-hero">▶&nbsp; Start Exploring</a>
-        <a href="#how-it-works" class="btn btn-ghost hero-ghost">How it works</a>
+        <a href="#app" class="btn btn-hero" data-i18n="hero-cta">▶  Start Exploring</a>
+        <a href="#how-it-works" class="btn btn-ghost hero-ghost" data-i18n="hero-how">How it works</a>
       </div>
       <div class="hero-stats">
-        <div class="hero-stat"><strong>23+</strong><span>digit n values</span></div>
+        <div class="hero-stat"><strong data-i18n="hero-stat1-val">23+</strong><span data-i18n="hero-stat1-lbl">digit n values</span></div>
         <div class="hero-stat-sep"></div>
-        <div class="hero-stat"><strong>100M+</strong><span>evaluations / search</span></div>
+        <div class="hero-stat"><strong data-i18n="hero-stat2-val">100M+</strong><span data-i18n="hero-stat2-lbl">evaluations / search</span></div>
         <div class="hero-stat-sep"></div>
-        <div class="hero-stat"><strong>Real-time</strong><span>streaming results</span></div>
+        <div class="hero-stat"><strong data-i18n="hero-stat3-val">Real-time</strong><span data-i18n="hero-stat3-lbl">streaming results</span></div>
         <div class="hero-stat-sep"></div>
-        <div class="hero-stat"><strong>LaTeX</strong><span>equation import</span></div>
+        <div class="hero-stat"><strong data-i18n="hero-stat4-val">LaTeX</strong><span data-i18n="hero-stat4-lbl">equation import</span></div>
       </div>
     </div>
   </section>
@@ -106,20 +116,20 @@
 
     <!-- ─── LEFT PANEL: Inputs ───────────────────────────────────────────── -->
     <aside class="panel panel-inputs">
-      <h2 class="panel-title">Configure Search</h2>
+      <h2 class="panel-title" data-i18n="panel-title">Configure Search</h2>
 
       <!-- Solver mode tabs -->
       <div class="solver-tabs">
-        <button id="tab-ec"  class="solver-tab active" type="button">y&#178;&nbsp;=&nbsp;f(n,&thinsp;x)</button>
-        <button id="tab-gen" class="solver-tab" type="button">General Diophantine</button>
+        <button id="tab-ec"  class="solver-tab active" type="button" data-i18n="tab-ec">y&#178;&nbsp;=&nbsp;f(n,&thinsp;x)</button>
+        <button id="tab-gen" class="solver-tab" type="button" data-i18n="tab-gen">General Diophantine</button>
       </div>
 
       <!-- EC: unknowns sub-tabs (hidden in Gen mode) -->
       <div class="var-tabs" id="ec-var-tabs">
-        <button class="var-tab" id="ec-tab-2var" type="button">
+        <button class="var-tab" id="ec-tab-2var" type="button" data-i18n-html="ec-tab-2var-html">
           <strong>2 unknowns</strong> y&#178;&nbsp;=&nbsp;f(x)
         </button>
-        <button class="var-tab active" id="ec-tab-3var" type="button">
+        <button class="var-tab active" id="ec-tab-3var" type="button" data-i18n-html="ec-tab-3var-html">
           <strong>3 unknowns</strong> y&#178;&nbsp;=&nbsp;f(n,&thinsp;x)
         </button>
       </div>
@@ -354,10 +364,10 @@
       <section id="gen-inputs" class="param-section" style="display:none">
         <!-- Gen: unknowns sub-tabs -->
         <div class="var-tabs" id="gen-var-tabs" style="margin-bottom:14px">
-          <button class="var-tab" id="gen-tab-2var" type="button">
+          <button class="var-tab" id="gen-tab-2var" type="button" data-i18n-html="gen-tab-2var-html">
             <strong>2 unknowns</strong> F(n,&thinsp;x)&nbsp;=&nbsp;0
           </button>
-          <button class="var-tab active" id="gen-tab-3var" type="button">
+          <button class="var-tab active" id="gen-tab-3var" type="button" data-i18n-html="gen-tab-3var-html">
             <strong>3 unknowns</strong> F(n,&thinsp;x,&thinsp;y)&nbsp;=&nbsp;0
           </button>
         </div>
@@ -433,37 +443,19 @@
           when the equation has no&nbsp;<em>n</em>.
         </p>
         </div><!-- /gen-y-range-section -->
-
-        <!-- Symmetry-reduction option — only meaningful for poly_y_div (monic equations) -->
-        <div class="checkbox-row" style="margin-top:10px" id="gen-sym-row">
-          <label class="chk-label" title="When the equation is symmetric under all permutations of x, y, n (e.g. x³+y³+n³+xyn=k), checking this lets the solver find each solution once and emit all permutations automatically — roughly 6× faster.">
-            <input type="checkbox" id="gen-sym-reduction" />
-            Symmetric in x,&thinsp;y,&thinsp;n &mdash; apply 6&times;&nbsp;symmetry speedup
-            <span class="tooltip-wrap">
-              <span class="tooltip-icon">?</span>
-              <span class="tooltip-text">
-                If your equation is unchanged when you swap any two of x,&thinsp;y,&thinsp;n
-                (e.g.&nbsp;x³+y³+n³+x·y·n&nbsp;=&nbsp;k), tick this box.
-                The solver will scan only&nbsp;x&nbsp;≤&nbsp;n pairs and automatically generate
-                all 6 permutations of each solution found, giving a ~6× speedup.
-                Only effective for monic polynomial-in-y equations.
-              </span>
-            </span>
-          </label>
-        </div>
       </section>
 
       <!-- Skip-zero filter -->
       <section class="param-section">
-        <label class="param-label">Exclude from results</label>
+        <label class="param-label" data-i18n="label-exclude">Exclude from results</label>
         <div class="checkbox-row">
           <label class="chk-label">
             <input type="checkbox" id="skip-zero-n" />
-            Skip <em>n</em> = 0
+            <span data-i18n="chk-skip-n">Skip <em>n</em> = 0</span>
           </label>
           <label class="chk-label">
             <input type="checkbox" id="skip-zero-x" />
-            Skip <em>x</em> = 0
+            <span data-i18n="chk-skip-x">Skip <em>x</em> = 0</span>
           </label>
         </div>
       </section>
@@ -471,12 +463,12 @@
       <!-- Action -->
       <div class="btn-row">
         <button id="btn-search" class="btn btn-primary" type="button">
-          <span class="btn-icon">▶</span> Run Search
+          <span class="btn-icon">▶</span> <span data-i18n="btn-run">Run Search</span>
         </button>
         <button id="btn-stop" class="btn btn-danger" type="button" disabled>
-          &#9632; Stop
+          <span data-i18n="btn-stop">█ Stop</span>
         </button>
-        <button id="btn-clear" class="btn btn-ghost" type="button">
+        <button id="btn-clear" class="btn btn-ghost" type="button" data-i18n="btn-clear">
           Clear
         </button>
       </div>
@@ -499,26 +491,26 @@
       <div id="search-warning" class="warning-banner" style="display:none"></div>
 
       <!-- Status / summary -->
-      <div id="status-area" class="status-idle">
+      <div id="status-area" class="status-idle" data-i18n="status-idle">
         Enter a curve expression and click <strong>Run Search</strong>.
       </div>
 
       <!-- Rational-n Summary (revealed after search) -->
       <div id="n-summary-section" style="display:none">
-        <h3 class="n-summary-title">Rational <em>n</em> with integral points</h3>
+        <h3 class="n-summary-title" data-i18n="n-summary-title">Rational <em>n</em> with integral points</h3>
         <div id="n-summary-wrap"></div>
       </div>
 
       <!-- Solutions table -->
       <div id="table-wrap" style="display:none">
         <div class="table-header-row">
-          <h3 class="table-title">Integer Points Found</h3>
+          <h3 class="table-title" data-i18n="table-title">Integer Points Found</h3>
           <div class="table-actions">
             <span id="solution-count" class="badge">0 solutions</span>
             <div class="export-group">
-              <button id="btn-export" class="btn btn-ghost btn-sm" type="button">&#8595; Export CSV</button>
-              <button id="btn-export-pdf" class="btn btn-ghost btn-sm" type="button">&#8595; Export PDF</button>
-              <button id="btn-export-latex" class="btn btn-ghost btn-sm" type="button">&#8595; Export LaTeX</button>
+              <button id="btn-export" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-csv">&#8595; Export CSV</button>
+              <button id="btn-export-pdf" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-pdf">&#8595; Export PDF</button>
+              <button id="btn-export-latex" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-latex">&#8595; Export LaTeX</button>
             </div>
           </div>
         </div>
@@ -526,11 +518,11 @@
           <table id="results-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>n</th>
-                <th>x</th>
-                <th>y</th>
-                <th id="th-verify">Verify&nbsp;(y&#178;&nbsp;=&nbsp;f(n,x))</th>
+                <th data-i18n="th-index">#</th>
+                <th data-i18n="th-n">n</th>
+                <th data-i18n="th-x">x</th>
+                <th data-i18n="th-y">y</th>
+                <th id="th-verify" data-i18n="th-verify-ec">Verify (y² = f(n,x))</th>
               </tr>
             </thead>
             <tbody id="results-tbody"></tbody>
@@ -543,7 +535,14 @@
         <div class="plot-header">
           <h3 class="plot-title">Curve Visualization</h3>
           <span id="plot-n-label" class="plot-n-label"></span>
-          <button id="btn-toggle-plot" class="btn btn-ghost btn-sm" type="button">Hide plot</button>
+          <button id="btn-toggle-plot" class="btn btn-ghost btn-sm" data-i18n="btn-toggle-plot-hide" type="button">Hide plot</button>
+        </div>
+        <div class="plot-toolbar">
+          <button id="btn-zoom-in"    class="btn btn-ghost btn-xs" type="button" title="Zoom in">＋</button>
+          <button id="btn-zoom-out"   class="btn btn-ghost btn-xs" type="button" title="Zoom out">－</button>
+          <button id="btn-zoom-reset" class="btn btn-ghost btn-xs" type="button" title="Reset view" data-i18n="btn-zoom-reset">⟳ Reset</button>
+          <span class="plot-toolbar-sep"></span>
+          <button id="btn-toggle-labels" class="btn btn-ghost btn-xs" type="button" data-i18n="btn-hide-labels">Hide labels</button>
         </div>
         <div id="plot-container" class="plot-container">
           <canvas id="curve-canvas"></canvas>
@@ -558,8 +557,8 @@
       <!-- Empty state -->
       <div id="empty-state" class="empty-state" style="display:none">
         <span class="empty-icon">∅</span>
-        <p>No integer points found in the given range.</p>
-        <p class="dim">Try widening the x or n range, or adjusting the curve.</p>
+        <p data-i18n="empty-icon-msg">No integer points found in the given range.</p>
+        <p class="dim" data-i18n="empty-hint">Try widening the x or n range, or adjusting the curve.</p>
       </div>
     </section>
 
@@ -568,12 +567,12 @@
   <!-- ─── HOW IT WORKS ────────────────────────────────────────────────────── -->
   <section id="how-it-works" class="info-section">
     <div class="info-inner">
-      <h2>How It Works</h2>
+      <h2 data-i18n="how-title">How It Works</h2>
       <div class="info-grid">
         <div class="info-card">
           <div class="info-icon">1</div>
-          <h3>Parse the curve</h3>
-          <p>
+          <h3 data-i18n="how-1-title">Parse the curve</h3>
+          <p data-i18n="how-1-body">
             Your expression is parsed by
             <a href="https://www.sympy.org" target="_blank" rel="noopener">SymPy</a>
             into a symbolic form and compiled to a fast numeric function.
@@ -581,8 +580,8 @@
         </div>
         <div class="info-card">
           <div class="info-icon">2</div>
-          <h3>Iterate over (n, x)</h3>
-          <p>
+          <h3 data-i18n="how-2-title">Iterate over (n, x)</h3>
+          <p data-i18n="how-2-body">
             For each rational value of <em>n</em> in your range, every integer
             <em>x</em> is tested. The server computes <em>f(n, x)</em> and
             checks whether it is a perfect square.
@@ -590,16 +589,16 @@
         </div>
         <div class="info-card">
           <div class="info-icon">3</div>
-          <h3>Emit integer points</h3>
-          <p>
+          <h3 data-i18n="how-3-title">Emit integer points</h3>
+          <p data-i18n="how-3-body">
             Whenever <em>f(n, x)</em> is a non-negative perfect square, the
             triple <em>(n, x, ±y)</em> is streamed to your browser in real time.
           </p>
         </div>
         <div class="info-card">
           <div class="info-icon">4</div>
-          <h3>Export results</h3>
-          <p>
+          <h3 data-i18n="how-4-title">Export results</h3>
+          <p data-i18n="how-4-body">
             All discovered integer points can be downloaded as a CSV file for
             further analysis or verification.
           </p>
@@ -607,8 +606,8 @@
       </div>
 
       <div class="math-note">
-        <h3>Mathematical context</h3>
-        <p>
+        <h3 data-i18n="math-title">Mathematical context</h3>
+        <p data-i18n-html="math-context-html">
           An <strong>elliptic curve</strong> over ℚ can be written in Weierstrass
           form as <em>y² = x³ + ax + b</em>.  By introducing a rational parameter
           <em>n</em>, families of curves such as <em>y² = x³ − n²x</em> arise
@@ -626,7 +625,7 @@
   <!-- ─── EXAMPLES ────────────────────────────────────────────────────────── -->
   <section id="examples" class="examples-section">
     <div class="info-inner">
-      <h2>Example Curves</h2>
+      <h2 data-i18n="ex-title">Example Curves</h2>
       <div class="example-grid" id="example-grid"></div>
     </div>
   </section>
@@ -638,11 +637,11 @@
         <span class="footer-name">Elliptic Curve Solver</span>
       </div>
       <div class="footer-links">
-        <a href="#app">Solver</a>
-        <a href="#how-it-works">How it works</a>
-        <a href="#examples">Examples</a>
-        <a href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://en.wikipedia.org/wiki/Elliptic_curve" target="_blank" rel="noopener">What is an elliptic curve?</a>
+        <a href="#app" data-i18n="footer-solver">Solver</a>
+        <a href="#how-it-works" data-i18n="footer-how">How it works</a>
+        <a href="#examples" data-i18n="footer-examples">Examples</a>
+        <a href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener" data-i18n="footer-github">GitHub</a>
+        <a href="https://en.wikipedia.org/wiki/Elliptic_curve" target="_blank" rel="noopener" data-i18n="footer-wiki">What is an elliptic curve?</a>
       </div>
       <p class="footer-copy">
         Built with Flask · SymPy · NumPy · KaTeX &nbsp;·&nbsp;
@@ -651,6 +650,7 @@
     </div>
   </footer>
 
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=14"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=16"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=16"></script>
 </body>
 </html>
