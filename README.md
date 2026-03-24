@@ -5,20 +5,90 @@
 A Flask web app for finding integer solutions to polynomial Diophantine equations.
 Supports the classical **y² = f(n, x)** elliptic-curve family mode **and** a
 fully general **F(x, y, n) = 0** mode for arbitrary polynomial equations
-like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.  
-**[Live demo →](http://localhost:5001/#examples)**
+like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.
+
+**Live (planned): `https://www.ecades.com`**
+
+> Until the custom domain is configured, your Render deploy will be available at
+> `https://<your-service>.onrender.com`.
 
 ---
-(At the moment this is how I open it works on my computer.)
 
-1. Open Terminal.app (not VS Code's built-in terminal).
+## Quick Start (local)
 
-2. Run: cd /Users/jamalmac/elliptic-curve-solver-app-or-website
-python3 app.py
-   
-3. Open http://localhost:5001 in Safari.
+```bash
+# 1. Clone
+git clone https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website.git
+cd elliptic-curve-solver-app-or-website
 
-4. To keep it running without blocking the terminal: python3 app.py &
+# 2. Install dependencies (Python 3.10+)
+pip install -r requirements.txt
+
+# 3. Run
+python app.py
+```
+
+Open **http://localhost:5001**.
+
+---
+
+## Deploy to Render
+
+The repo ships `Procfile` and `render.yaml` for one-click deployment.
+
+### Option A: Blueprint deploy (recommended)
+
+1. Sign in to Render and connect your GitHub account.
+2. Render Dashboard → **New +** → **Blueprint**.
+3. Select this repository: `JAgbanwa/elliptic-curve-solver-app-or-website`.
+4. Render reads `render.yaml` automatically — confirm and click **Apply** / **Create**.
+5. Wait for the build to finish → your app will be live at:
+
+   - `https://<your-service>.onrender.com`
+
+### Option B: Web Service deploy
+
+1. Render Dashboard → **New +** → **Web Service**.
+2. Connect this repository.
+3. Use:
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `gunicorn app:app --timeout 300 --workers 2 --worker-class gthread --threads 4 --bind 0.0.0.0:$PORT`
+
+> Note: Render free tier web services may spin down after inactivity.
+
+---
+
+## Custom domain: `www.ecades.com`
+
+Recommended setup:
+
+- Use **`www.ecades.com`** as the canonical domain.
+- Redirect **`ecades.com` → `www.ecades.com`**.
+
+### 1) Buy the domain
+
+Purchase `ecades.com` from a registrar (Cloudflare Registrar, Namecheap, GoDaddy, etc.).
+
+### 2) Add domains in Render
+
+Render service → **Settings** → **Custom Domains**:
+
+- Add `www.ecades.com`
+- (Optional but recommended) Add `ecades.com`
+
+Render will show the exact DNS records to create.
+
+### 3) Configure DNS records
+
+Your DNS provider will typically need:
+
+- `www.ecades.com`: a **CNAME** record pointing to the target Render provides.
+- `ecades.com` (apex/root): either
+  - an **ALIAS/ANAME / CNAME flattening** record (if your DNS provider supports it), or
+  - an HTTP redirect rule sending `ecades.com` → `https://www.ecades.com`.
+
+After DNS propagates and Render verifies the records, `https://www.ecades.com` will serve over HTTPS.
+
 ---
 
 ## Features
@@ -58,38 +128,6 @@ python3 app.py
 - **CSV, PDF & LaTeX export** — download results as a spreadsheet, print to PDF, or export a ready-to-compile `.tex` file with full search-parameter metadata (bounds, compute time, strategy, exhaustiveness statement); PDF export embeds the curve plot as a PNG image; LaTeX export includes a full `pgfplots` tikzpicture
 - **Light / Dark mode** — toggle in the header; remembers your preference via localStorage; curve colours re-render automatically on theme change
 - **21 built-in examples** spanning both solver modes — click any card to instantly load and run the search
-
----
-
-## Quick Start (local)
-
-```bash
-# 1. Clone
-git clone https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website.git
-cd elliptic-curve-solver-app-or-website
-
-# 2. Install dependencies (Python 3.10+)
-pip install -r requirements.txt
-
-# 3. Run
-python app.py
-```
-
-Open **http://localhost:5001**.
-
----
-
-## Deploy to Render
-
-The repo ships `Procfile` and `render.yaml` for one-click deployment:
-
-1. Sign in to [render.com](https://render.com) with your GitHub account
-2. **New +** → **Web Service** → connect this repository
-3. Render reads `render.yaml` automatically — confirm and click **Create Web Service**
-4. ~3 min build → live at `https://<your-service>.onrender.com`
-
-> The free tier spins down after 15 min of inactivity (cold-start ~30 s).  
-> Upgrade to Starter ($7/month) for always-on.
 
 ---
 
@@ -154,29 +192,6 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
 
 ---
 
-## Example Curves & Equations
-
-### y² = f(n, x) examples
-
-| Name | Expression | Notes |
-|------|-----------|-------|
-| Congruent number curve | `x**3 - n**2*x` | Integer points ↔ n is a congruent number |
-| Weierstrass y²=x³+n | `x**3 + n` | Classic constant-shift family |
-| Hardy–Ramanujan 1729 | `x**3 - 1729*n**3` | Smart window centred on ∛(1729n³) |
-| Divisor mode | `(6n+3+x)² + P(n)/x` | Solution: n=77, x=97, y=±699 |
-| Large-solution demo | `x**3 + (x-n)**2` | Expression range finds y=10¹⁵ in seconds |
-
-### General Diophantine examples
-
-| Equation | Notes |
-|----------|-------|
-| `y**2 + y = x**3 - x` | 8 solutions in x ∈ [−5, 5] |
-| `x**2 + y**2 = n**2` | Pythagorean triples — n is the hypotenuse |
-| `x**3 + y**3 = n` | Sum-of-two-cubes; finds 1729 = 12³+1³ = 10³+9³ |
-| `y**3 - y = x**4 - 2*x - 2` | Degree-4 in x, degree-3 in y |
-
----
-
 ## Security
 
 - SymPy `sympify` with explicit symbol allow-list (`n`, `x`, `y`)
@@ -188,5 +203,3 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
 ---
 
 This tool is free and open forever. Improvements welcome — feel free to open issues or PRs!
-
-
