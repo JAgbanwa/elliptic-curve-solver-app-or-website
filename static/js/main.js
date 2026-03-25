@@ -699,6 +699,7 @@ function startSearch() {
         const _tsp = (typeof t === "function") ? (_ts !== 1 ? t("sol-plural") : t("sol-singular")) : (_ts !== 1 ? "solutions" : "solution");
         progressStats.textContent =
           `Complete — ${_ts} total ${_tsp}.`;
+        saveSearchToHistory();
         setTimeout(loadPlot, 80);
         break;
 
@@ -1703,3 +1704,226 @@ window.addEventListener("load", () => {
     }
   });
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SEARCH HISTORY
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const HISTORY_KEY = "ecs-search-history";
+const MAX_HISTORY = 50;
+
+function _getHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
+}
+function _setHistory(arr) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+}
+
+function saveSearchToHistory() {
+  if (!searchMeta || !searchMeta.finishedAt) return;
+  const entry = {
+    id:            Date.now(),
+    timestamp:     new Date().toISOString(),
+    params:        Object.assign({}, searchMeta),
+    results:       allSolutions.slice(0, 500),  // cap at 500 rows to keep storage reasonable
+    solutionCount: allSolutions.length,
+    computeMs:     searchMeta.finishedAt - searchMeta.startedAt,
+  };
+  const history = _getHistory();
+  history.unshift(entry);
+  if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+  _setHistory(history);
+  _syncHistoryBadge();
+}
+
+function _syncHistoryBadge() {
+  const badge = document.getElementById("history-count-badge");
+  if (!badge) return;
+  const count = _getHistory().length;
+  badge.textContent = count;
+  badge.classList.toggle("visible", count > 0);
+}
+
+function _formatRelTime(isoStr) {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const sec  = Math.floor(diff / 1000);
+  if (sec < 60)  return "just now";
+  const min  = Math.floor(sec / 60);
+  if (min < 60)  return `${min}m ago`;
+  const hr   = Math.floor(min / 60);
+  if (hr  < 24)  return `${hr}h ago`;
+  const day  = Math.floor(hr / 24);
+  return `${day}d ago`;
+}
+
+function _ht(key, fallback) {
+  return (typeof t === "function") ? (t(key) || fallback) : fallback;
+}
+
+function renderHistoryPanel() {
+  const list = document.getElementById("history-list");
+  if (!list) return;
+  const history = _getHistory();
+  list.innerHTML = "";
+
+  if (history.length === 0) {
+    list.innerHTML = `
+      <div class="history-empty">
+        <div class="history-empty-icon">🕐</div>
+        <div>${_ht("history-empty", "No searches saved yet.")}</div>
+        <div style="font-size:.8rem;margin-top:4px;opacity:.75">${_ht("history-empty-sub", "Run a search and it will appear here.")}</div>
+      </div>`;
+    return;
+  }
+
+  history.forEach((entry) => {
+    const p       = entry.params;
+    const nRange  = p.nMin === p.nMax ? `n = ${p.nMin}` : `n ∈ [${p.nMin}, ${p.nMax}]`;
+    const modeStr = p.mode === "gen" ? "Diophantine" : `EC · ${p.xMode || ""}`;
+    const secs    = ((entry.computeMs || 0) / 1000).toFixed(2);
+    const solWord = _ht(entry.solutionCount !== 1 ? "sol-plural" : "sol-singular", entry.solutionCount !== 1 ? "solutions" : "solution");
+
+    const card = document.createElement("div");
+    card.className  = "history-entry";
+    card.dataset.id = entry.id;
+    card.innerHTML  = `
+      <div class="history-entry-meta">
+        <span class="history-entry-time">${_formatRelTime(entry.timestamp)}</span>
+        <span class="history-entry-sols">${entry.solutionCount} ${solWord}</span>
+      </div>
+      <div class="history-entry-expr">${escHtml(p.equation || "—")}</div>
+      <div class="history-entry-detail">${escHtml(nRange)} &nbsp;·&nbsp; ${escHtml(modeStr)} &nbsp;·&nbsp; ${secs}s</div>
+      <div class="history-entry-actions">
+        <button class="history-restore-btn" type="button">${_ht("history-restore", "↩ Restore")}</button>
+        <button class="history-delete-btn"  type="button">${_ht("history-delete",  "Delete")}</button>
+      </div>`;
+
+    card.querySelector(".history-restore-btn").addEventListener("click", () => {
+      restoreFromHistory(entry);
+      closeHistoryDrawer();
+    });
+    card.querySelector(".history-delete-btn").addEventListener("click", () => {
+      deleteHistoryEntry(entry.id);
+    });
+
+    list.appendChild(card);
+  });
+}
+
+function deleteHistoryEntry(id) {
+  _setHistory(_getHistory().filter(e => e.id !== id));
+  _syncHistoryBadge();
+  renderHistoryPanel();
+}
+
+function restoreFromHistory(entry) {
+  const p = entry.params;
+
+  if (p.mode === "gen") {
+    tabGen && tabGen.click();
+    if (genEqIn)   genEqIn.value   = (p.equation || "").replace(/^y[²2]\s*=\s*/i, "").trim();
+    if (genXMinIn) genXMinIn.value = p.xMin  || "-50";
+    if (genXMaxIn) genXMaxIn.value = p.xMax  || "50";
+    if (genYMinIn) genYMinIn.value = p.yMin  || "-1000";
+    if (genYMaxIn) genYMaxIn.value = p.yMax  || "1000";
+  } else {
+    tabEC && tabEC.click();
+    const rawExpr = (p.equation || "").replace(/^y[²2]\s*=\s*/i, "").trim();
+    if (exprInput) { exprInput.value = rawExpr; fetchLatex(rawExpr); }
+
+    if (xModeSelect) {
+      xModeSelect.value = p.xMode || "autoscale";
+      xModeSelect.dispatchEvent(new Event("change"));
+    }
+    if      (p.xMode === "autoscale" && xScaleFactorIn)  xScaleFactorIn.value  = p.xScaleFactor || 10;
+    else if (p.xMode === "window") {
+      if (xCenterExprIn) xCenterExprIn.value = p.xCenterExpr || "12*n";
+      if (xHalfWidthIn)  xHalfWidthIn.value  = p.xHalfWidth  || 5000;
+    } else if (p.xMode === "divisor") {
+      if (xDivisorPolyIn) xDivisorPolyIn.value = p.xDivisorPoly || "";
+      if (xDivisorMaxIn)  xDivisorMaxIn.value  = p.xDivisorMax  || 1000000;
+    } else if (p.xMode === "exprrange") {
+      if (xStartExprIn) xStartExprIn.value = p.xStartExpr || "-100";
+      if (xEndExprIn)   xEndExprIn.value   = p.xEndExpr   || "100";
+      if (xStepExprIn)  xStepExprIn.value  = p.xStepExpr  || "1";
+    } else {
+      if (xMinIn) xMinIn.value = p.xMin ?? -1000;
+      if (xMaxIn) xMaxIn.value = p.xMax ??  1000;
+    }
+  }
+
+  // n range
+  if (p.ecVarMode === "2var") {
+    ecTab2Var && ecTab2Var.click();
+    if (ecNSingleIn) ecNSingleIn.value = p.nMin;
+  } else {
+    ecTab3Var && ecTab3Var.click();
+    if (nMinIn)   nMinIn.value   = p.nMin   || 1;
+    if (nMaxIn)   nMaxIn.value   = p.nMax   || 10;
+    if (nDenomIn) nDenomIn.value = p.nDenom || 1;
+  }
+
+  if (skipZeroNChk) skipZeroNChk.checked = !!p.skipZeroN;
+  if (skipZeroXChk) skipZeroXChk.checked = !!p.skipZeroX;
+
+  // Restore saved results directly without re-running the search
+  clearResults();
+  if (entry.results && entry.results.length > 0) {
+    tableWrap.style.display  = "block";
+    emptyState.style.display = "none";
+    addRows(entry.results);
+    const solWord = _ht(entry.solutionCount !== 1 ? "sol-plural" : "sol-singular", entry.solutionCount !== 1 ? "solutions" : "solution");
+    solCount.textContent = `${entry.solutionCount} ${solWord}`;
+    if (entry.solutionCount > entry.results.length) {
+      // Some results were trimmed at save time
+      setStatus(`${_ht("history-restore-note", "Restored")} ${entry.results.length} / ${entry.solutionCount} ${solWord} ${_ht("history-from", "from history")}.`, "status-done");
+    } else {
+      setStatus(`${_ht("history-restore-note", "Restored")} ${entry.solutionCount} ${solWord} ${_ht("history-from", "from history")}.`, "status-done");
+    }
+  } else {
+    emptyState.style.display = "block";
+    setStatus(_ht("status-no-results", "Search complete — no integer points found."), "status-done");
+  }
+  document.querySelector(".main-grid").scrollIntoView({ behavior: "smooth" });
+}
+
+function openHistoryDrawer() {
+  renderHistoryPanel();
+  const drawer   = document.getElementById("history-drawer");
+  const backdrop = document.getElementById("history-backdrop");
+  if (drawer)   drawer.classList.add("open");
+  if (backdrop) backdrop.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeHistoryDrawer() {
+  const drawer   = document.getElementById("history-drawer");
+  const backdrop = document.getElementById("history-backdrop");
+  if (drawer)   drawer.classList.remove("open");
+  if (backdrop) backdrop.classList.remove("open");
+  document.body.style.overflow = "";
+}
+
+(function initHistoryUI() {
+  const btnH        = document.getElementById("btn-history");
+  const btnClose    = document.getElementById("btn-history-close");
+  const btnClearAll = document.getElementById("btn-history-clear");
+  const backdrop    = document.getElementById("history-backdrop");
+
+  if (btnH)        btnH.addEventListener("click", openHistoryDrawer);
+  if (btnClose)    btnClose.addEventListener("click", closeHistoryDrawer);
+  if (backdrop)    backdrop.addEventListener("click", closeHistoryDrawer);
+  if (btnClearAll) btnClearAll.addEventListener("click", () => {
+    if (confirm(_ht("history-confirm-clear", "Clear all search history?"))) {
+      _setHistory([]);
+      _syncHistoryBadge();
+      renderHistoryPanel();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeHistoryDrawer();
+  });
+
+  _syncHistoryBadge();
+})();

@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=18" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=19" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -475,6 +475,11 @@
         <button id="btn-clear" class="btn btn-ghost" type="button" data-i18n="btn-clear">
           Clear
         </button>
+        <button id="btn-history" class="btn-history" type="button" title="Search history">
+          <span>⏱</span>
+          <span data-i18n="btn-history">History</span>
+          <span id="history-count-badge" class="history-count-badge"></span>
+        </button>
       </div>
     </aside>
 
@@ -654,7 +659,18 @@
     </div>
   </footer>
 
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=18"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=18"></script>
+  <!-- Search History Drawer -->
+  <div id="history-backdrop" class="history-backdrop" aria-hidden="true"></div>
+  <div id="history-drawer" class="history-drawer" role="dialog" aria-modal="true" aria-label="Search history">
+    <div class="history-drawer-header">
+      <span class="history-drawer-title" data-i18n="history-title">Search History</span>
+      <button id="btn-history-clear" class="history-clear-btn" type="button" data-i18n="history-clear-all">Clear all</button>
+      <button id="btn-history-close" class="history-close-btn" type="button" aria-label="Close">✕</button>
+    </div>
+    <div id="history-list" class="history-list"></div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=19"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=19"></script>
 </body>
 </html>
