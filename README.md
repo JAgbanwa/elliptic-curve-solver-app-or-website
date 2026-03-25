@@ -56,6 +56,12 @@ python3 app.py
   - **Non-polynomial y** (e.g. `x^y = n`) — integer points plotted as a scatter with a note explaining the curve shape is unavailable
   - Caption identifies the strategy (`ec`, `poly_y`, `brute3`, …) so you always know what was drawn and why
 - **CSV, PDF, LaTeX & BibTeX export** — download results as a spreadsheet, print to PDF, export a ready-to-compile `.tex` file, or **copy a BibTeX `@misc` citation** to the clipboard with one click; PDF export embeds the curve plot as a PNG image; LaTeX export includes a full `pgfplots` tikzpicture; BibTeX entry includes a generated citekey, equation title, year, GitHub URL, solution count, and n-range note — button text flips to ✓ Copied! with a slide-up toast notification
+- **Large-range robustness** — searches over millions of values no longer drop with "Connection error":
+  - **SSE keepalive heartbeat** — `: keepalive` SSE comments sent every 9 s keep the HTTP pipe alive through reverse proxies and browser idle-timeout heuristics
+  - **Soft 245 s timeout** — instead of gunicorn hard-killing the request at 300 s, the server cleanly sends partial results with `⏱ Time limit reached — N result(s) found. Narrow the range for a complete search.`
+  - **Quadratic-residue modular sieve** — for fixed x-ranges ≥ 5 000, uses moduli 8, 9, 5, 7 to eliminate ~85–95 % of candidates before any float evaluation (polynomial congruence property; only O(Σmᵢ) integer evaluations needed)
+  - **Exact arithmetic fallback** — when numpy rhs > 9×10¹⁵ (float64 precision boundary), re-evaluates using Python arbitrary-precision integers + `math.isqrt`, eliminating missed solutions and int64 overflow for large y values
+  - **mpmath high-precision roots** — General Diophantine `poly_y` strategy uses `mpmath.polyroots` (arbitrary precision) instead of `numpy.roots` when polynomial coefficients exceed 10⁸, finding integer solutions with very large y that float64 companion-matrix eigenvalues would miss
 - **Multi-language support (i18n)** — the entire UI, including hero section, controls, status messages, "How It Works", example cards, export file headers/section titles, and all search-parameter report lines (PDF & LaTeX), can be switched to any of **12 languages** via the language selector in the header:
   - 🌐 English, 🇳🇱 Nederlands, 🇫🇷 Français, 🇩🇪 Deutsch, 🇪🇸 Español, 🇧🇷 Português, 🇸🇦 العربية (with RTL), 🇨🇳 中文
   - 🇹🇿 Kiswahili, 🇳🇬 Igbo, 🇳🇬 Yorùbá, 🇬🇭 Akan (Twi)
