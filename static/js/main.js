@@ -542,6 +542,9 @@ function startSearch() {
   const searchUrl = currentSolverMode === "gen" ? buildDiophURL() : buildSearchURL();
   evtSource = new EventSource(searchUrl);
 
+  // Track solutions received so the onerror handler can show a useful count
+  let _ssFnd = 0;
+
   evtSource.onmessage = (ev) => {
     let msg;
     try { msg = JSON.parse(ev.data); }
@@ -601,6 +604,7 @@ function startSearch() {
         if (!msg.data || !msg.data.length) break;
         tableWrap.style.display = "block";
         addRows(msg.data);
+        _ssFnd = allSolutions.length;   // keep running total for onerror
         const _sp2 = (typeof t === "function") ? (allSolutions.length !== 1 ? t("sol-plural") : t("sol-singular")) : (allSolutions.length !== 1 ? "solutions" : "solution");
         solCount.textContent = `${allSolutions.length} ${_sp2}`;
         break;
@@ -684,7 +688,17 @@ function startSearch() {
         btnStop.disabled   = true;
         progressFill.style.width = "100%";
         renderNSummary(msg.n_with_solutions || [], nTotalCount);
-        if (allSolutions.length === 0) {
+        if (msg.timed_out) {
+          // Server hit the 245 s soft timeout — partial results are shown
+          const _cnt = allSolutions.length;
+          const _sp  = (typeof t === "function") ? (_cnt !== 1 ? t("sol-plural") : t("sol-singular")) : (_cnt !== 1 ? "solutions" : "solution");
+          const _atN = msg.timed_out_at_n != null ? ` (stopped at n = ${msg.timed_out_at_n})` : "";
+          setStatus(
+            `⏱ Time limit reached — ${_cnt} ${_sp} found (partial)${_atN}. Narrow the range for a complete search.`,
+            "status-warn",
+          );
+          progressStats.textContent = `Partial — ${_cnt} ${_sp} found before time limit.`;
+        } else if (allSolutions.length === 0) {
           emptyState.style.display  = "block";
           tableWrap.style.display  = "none";
           setStatus((typeof t === "function") ? t("status-no-results") : "Search complete — no integer points found.", "status-done");
@@ -695,10 +709,11 @@ function startSearch() {
             "status-done",
           );
         }
-        const _ts = msg.total_solutions;
-        const _tsp = (typeof t === "function") ? (_ts !== 1 ? t("sol-plural") : t("sol-singular")) : (_ts !== 1 ? "solutions" : "solution");
-        progressStats.textContent =
-          `Complete — ${_ts} total ${_tsp}.`;
+        if (!msg.timed_out) {
+          const _ts = msg.total_solutions;
+          const _tsp = (typeof t === "function") ? (_ts !== 1 ? t("sol-plural") : t("sol-singular")) : (_ts !== 1 ? "solutions" : "solution");
+          progressStats.textContent = `Complete — ${_ts} total ${_tsp}.`;
+        }
         saveSearchToHistory();
         setTimeout(loadPlot, 80);
         break;
@@ -720,13 +735,18 @@ function startSearch() {
     // first — the done handler sets evtSource = null, so the check below
     // correctly suppresses the spurious error in that case.
     const capturedSource = evtSource;
+    const capturedCount  = _ssFnd;   // solutions received before the drop
     setTimeout(() => {
       if (evtSource && evtSource === capturedSource) {
         evtSource.close();
         evtSource = null;
         btnSearch.disabled = false;
         btnStop.disabled   = true;
-        setStatus((typeof t === "function") ? t("status-conn-error") : "Connection error — search interrupted.", "status-error");
+        const errBase = (typeof t === "function") ? t("status-conn-error") : null;
+        const errMsg = capturedCount > 0
+          ? `Connection lost — ${capturedCount} result(s) found before interruption. Try a smaller range or use Smart Window / Divisor mode for large searches.`
+          : (errBase || "Connection error — search interrupted. Try a smaller range.");
+        setStatus(errMsg, "status-error");
       }
     }, 0);
   };

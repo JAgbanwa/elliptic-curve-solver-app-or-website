@@ -15,8 +15,16 @@ from __future__ import annotations
 import re
 import math
 import json
+import time
 
 import numpy as np
+
+try:
+    import mpmath as _mpmath
+    _MPMATH = True
+except ImportError:
+    _mpmath = None  # type: ignore[assignment]
+    _MPMATH = False
 
 from flask import Flask, render_template, request, Response, stream_with_context
 from sympy import symbols, sympify, lambdify, latex as sym_latex
@@ -28,6 +36,27 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 n_sym, x_sym, y_sym = symbols("n x y")
 
+# ── SSE keepalive / soft-timeout ───────────────────────────────────────────────
+# Browsers and reverse proxies drop idle SSE connections.  Yielding an SSE
+# comment (": …\n\n") every _KEEPALIVE_SEC keeps the pipe alive without
+# affecting the browser's event-listener logic.
+_SSE_KEEPALIVE     = ": keepalive\n\n"
+_KEEPALIVE_SEC     = 9      # seconds between heartbeat pings
+_SOFT_TIMEOUT      = 245    # graceful shutdown before gunicorn's 300 s hard limit
+
+# ── Large-value exact-arithmetic threshold ─────────────────────────────────────
+# numpy float64 has 53-bit mantissa: values > 9×10^15 lose integer precision.
+# For rhs above this threshold the numpy fast-path re-evaluates using the
+# exact Python big-integer evaluator.
+_EXACT_THRESH = 9_000_000_000_000_000   # 9 × 10^15
+
+# ── Quadratic-residue (QR) modular sieve ──────────────────────────────────────
+# For y² = f(n, x) to have a solution, f(n, x) must be a QR modulo every
+# modulus below.  Using these four residues eliminates ~85-95 % of candidates
+# before any square-root computation.  Only activated for large x ranges.
+_SIEVE_MODULI = (8, 9, 5, 7)
+_SIEVE_MIN_X  = 5_000   # only sieve when len(x_arr) exceeds this
+
 # ── Security ───────────────────────────────────────────────────────────────────
 _FORBIDDEN = re.compile(
     r"(__\w+__"
@@ -38,6 +67,35 @@ _FORBIDDEN = re.compile(
     r"|\bcompile\b)",
     re.IGNORECASE,
 )
+
+
+def _compute_qr_sieve(f_py_exact, n_val, x_int_arr: np.ndarray,
+                       moduli: tuple = _SIEVE_MODULI) -> np.ndarray:
+    """Return a boolean numpy mask for x candidates that pass the QR pre-filter.
+
+    For y² = f(n, x) to have an integer solution, f(n, x) must be a quadratic
+    residue modulo every modulus in *moduli*.  Polynomial congruence guarantees
+    f(n, x) mod m depends only on x mod m, so only O(Σ mᵢ) exact evaluations
+    are needed to build the sieve; numpy vectorised ops apply it in O(|x_arr|).
+
+    Expected rejection rate: ~85-95 % of candidates eliminated instantly,
+    giving a massive speed-up for large x ranges.
+    """
+    combined = np.ones(len(x_int_arr), dtype=bool)
+    for m in moduli:
+        qr_m = np.fromiter(sorted({(r * r) % m for r in range(m)}), dtype=np.int64)
+        f_res = np.empty(m, dtype=np.int64)
+        for xr in range(m):
+            try:
+                v = int(f_py_exact(n_val, xr)) % m
+                f_res[xr] = (v + m) % m
+            except Exception:  # noqa: BLE001
+                # Can't evaluate modularly (e.g. rational n) → allow all residues
+                f_res[xr] = int(qr_m[0])
+        x_mod_m   = (x_int_arr % m + m).astype(np.int64) % m
+        f_at_xmod = f_res[x_mod_m]
+        combined &= np.isin(f_at_xmod, qr_m)
+    return combined
 
 
 def parse_expr(raw: str):
@@ -461,6 +519,16 @@ def api_search():
             yield sse({"type": "error", "message": f"Cannot compile expression: {exc}"})
             return
 
+        # ── exact Python big-integer evaluator (for large-height fallback) ────
+        try:
+            f_py_exact = lambdify((n_sym, x_sym), expr, modules=[])
+        except Exception:  # noqa: BLE001
+            f_py_exact = None
+
+        # ── timing state for heartbeat / soft-timeout ─────────────────────────
+        t_start = time.monotonic()
+        last_hb = t_start
+
         # ── build list of n values (integer or rational) ──────────────────────
         from fractions import Fraction  # noqa: PLC0415
 
@@ -516,6 +584,16 @@ def api_search():
             for idx, (n_raw_val, n_disp) in enumerate(n_raw):
                 if skip_zero_n and n_raw_val == 0:
                     continue
+                # ── heartbeat + soft-timeout ──────────────────────────────────
+                _now = time.monotonic()
+                if _now - last_hb >= _KEEPALIVE_SEC:
+                    yield _SSE_KEEPALIVE
+                    last_hb = _now
+                if _now - t_start >= _SOFT_TIMEOUT:
+                    yield sse({"type": "done", "total_solutions": solutions_found_w,
+                               "n_with_solutions": n_with_solutions_w,
+                               "timed_out": True, "timed_out_at_n": n_disp})
+                    return
                 batch_w: list[dict] = []
                 try:
                     center = _eval_center(x_center_expr_str, n_raw_val)
@@ -602,6 +680,16 @@ def api_search():
             for idx, (n_raw_val, n_disp) in enumerate(n_raw):
                 if skip_zero_n and n_raw_val == 0:
                     continue
+                # ── heartbeat + soft-timeout ──────────────────────────────────
+                _now = time.monotonic()
+                if _now - last_hb >= _KEEPALIVE_SEC:
+                    yield _SSE_KEEPALIVE
+                    last_hb = _now
+                if _now - t_start >= _SOFT_TIMEOUT:
+                    yield sse({"type": "done", "total_solutions": sol_er,
+                               "n_with_solutions": n_with_sol_er,
+                               "timed_out": True, "timed_out_at_n": n_disp})
+                    return
                 batch_er: list[dict] = []
                 try:
                     x_start_v = _eval_center(x_start_expr, n_raw_val)
@@ -687,6 +775,16 @@ def api_search():
             for idx, (n_raw_val, n_disp) in enumerate(n_raw):
                 if skip_zero_n and n_raw_val == 0:
                     continue
+                # ── heartbeat + soft-timeout ──────────────────────────────────
+                _now = time.monotonic()
+                if _now - last_hb >= _KEEPALIVE_SEC:
+                    yield _SSE_KEEPALIVE
+                    last_hb = _now
+                if _now - t_start >= _SOFT_TIMEOUT:
+                    yield sse({"type": "done", "total_solutions": sol_d,
+                               "n_with_solutions": n_with_sol_d,
+                               "timed_out": True, "timed_out_at_n": n_disp})
+                    return
                 batch_d: list[dict] = []
                 try:
                     p_val = div_py(n_raw_val)
@@ -749,10 +847,12 @@ def api_search():
                 "type": "warning",
                 "message": (
                     f"Large search: {total_evals:,} evaluations. "
-                    "Results stream as found — click Stop any time."
+                    "Results stream as found — a 245-second time limit applies. "
+                    "For exhaustive results on very large ranges, use Smart Window "
+                    "or Divisor mode instead."
                 ),
             })
-        # No hard limit: search always proceeds.
+        # No hard limit: search always proceeds (soft timeout at 245 s).
 
         yield sse({"type": "start", "n_count": n_count,
                    "x_count": x_count, "total_evals": total_evals,
@@ -771,6 +871,18 @@ def api_search():
         for idx, (n_float, n_disp) in enumerate(n_pairs):
             if skip_zero_n and n_float == 0.0:
                 continue
+
+            # ── heartbeat + soft-timeout ──────────────────────────────────────
+            _now = time.monotonic()
+            if _now - last_hb >= _KEEPALIVE_SEC:
+                yield _SSE_KEEPALIVE
+                last_hb = _now
+            if _now - t_start >= _SOFT_TIMEOUT:
+                yield sse({"type": "done", "total_solutions": solutions_found,
+                           "n_with_solutions": n_with_solutions,
+                           "timed_out": True, "timed_out_at_n": n_disp})
+                return
+
             batch: list[dict] = []
 
             # Build per-n x range when auto-scaling
@@ -790,11 +902,24 @@ def api_search():
                 x_arr = np.arange(-half, half + 1, dtype=np.float64)
                 x_int = np.arange(-half, half + 1, dtype=np.int64)
 
+            # ── QR modular sieve: eliminates ~85-95 % of non-residue x values ─
+            # Only for integer n (rational fractions don't commute cleanly with mod)
+            _n_exact = n_raw[idx][0]
+            if (f_py_exact is not None
+                    and len(x_int) >= _SIEVE_MIN_X
+                    and isinstance(_n_exact, int)):
+                _sv = _compute_qr_sieve(f_py_exact, _n_exact, x_int)
+                x_arr_eval = x_arr[_sv]
+                x_int_eval = x_int[_sv]
+            else:
+                x_arr_eval = x_arr
+                x_int_eval = x_int
+
             try:
-                rhs_raw = f_fast(n_float, x_arr)
+                rhs_raw = f_fast(n_float, x_arr_eval)
                 rhs_arr = np.asarray(rhs_raw, dtype=np.float64)
                 if rhs_arr.ndim == 0:          # expression independent of x
-                    rhs_arr = np.full(len(x_arr), float(rhs_arr))
+                    rhs_arr = np.full(len(x_arr_eval), float(rhs_arr))
             except Exception:  # noqa: BLE001
                 pass
             else:
@@ -805,22 +930,32 @@ def api_search():
                     & (np.abs(rhs_arr - rhs_round) <= 1e-6)
                 )
                 if np.any(mask):
-                    cand_rhs = rhs_round[mask].astype(np.int64)
-                    cand_x   = x_int[mask]
-                    # Robust integer sqrt: round avoids floating-point under/over-estimate
-                    y_cand   = np.round(
-                        np.sqrt(cand_rhs.astype(np.float64))
-                    ).astype(np.int64)
-                    sq_mask  = y_cand * y_cand == cand_rhs
-                    for j in np.where(sq_mask)[0]:
+                    cand_rhs_np = rhs_round[mask]
+                    cand_x      = x_int_eval[mask]
+                    # Use exact Python big-integer arithmetic for the final check.
+                    # numpy int64 overflows for y > ~3×10⁹; float64 sqrt loses
+                    # precision for rhs > 9×10¹⁵.  math.isqrt handles any size.
+                    for j in range(len(cand_x)):
                         x_val = int(cand_x[j])
                         if skip_zero_x and x_val == 0:
                             continue
-                        y_pos = int(y_cand[j])
-                        batch.append({"n": n_disp, "x": x_val, "y":  y_pos})
-                        if y_pos > 0:
-                            batch.append({"n": n_disp, "x": x_val, "y": -y_pos})
-                    solutions_found += int(np.sum(sq_mask))
+                        rhs_approx = int(cand_rhs_np[j])
+                        # Re-evaluate exactly when float64 may have lost precision
+                        if rhs_approx > _EXACT_THRESH and f_py_exact is not None:
+                            try:
+                                rhs_exact = int(f_py_exact(_n_exact, x_val))
+                            except Exception:  # noqa: BLE001
+                                rhs_exact = rhs_approx
+                        else:
+                            rhs_exact = rhs_approx
+                        if rhs_exact < 0:
+                            continue
+                        y_pos = math.isqrt(rhs_exact)   # exact, arbitrary precision
+                        if y_pos * y_pos == rhs_exact:
+                            batch.append({"n": n_disp, "x": x_val, "y":  y_pos})
+                            if y_pos > 0:
+                                batch.append({"n": n_disp, "x": x_val, "y": -y_pos})
+                            solutions_found += 1
 
             if batch:
                 n_with_solutions.append(n_disp)
@@ -971,7 +1106,7 @@ def api_diophantine():  # noqa: C901
         if total_evals > WARN_EVALS:
             yield sse({"type": "warning",
                        "message": f"Large search: {total_evals:,} evaluations. "
-                                  "Results stream live \u2014 click Stop any time."})
+                                  "Results stream live \u2014 a 245-second time limit applies."})
 
         yield sse({
             "type":        "start",
@@ -987,13 +1122,30 @@ def api_diophantine():  # noqa: C901
         n_with_solutions: list[str] = []
         report_step = max(1, n_count // 200)
 
+        # ── timing state for heartbeat / soft-timeout ─────────────────────────
+        t_start = time.monotonic()
+        last_hb = t_start
+
         # ══════════════════════════════════════════════════════════════════════
-        # STRATEGY: poly_y — polynomial-root fast path (unchanged behaviour)
+        # STRATEGY: poly_y — polynomial-root fast path
+        # Uses mpmath high-precision roots when polynomial coefficients are
+        # very large (> 1e8), preventing precision loss that would cause
+        # numpy.roots() to miss correct integer candidates.
         # ══════════════════════════════════════════════════════════════════════
         if strategy == "poly_y":
             for idx, (n_raw_val, n_disp) in enumerate(n_raw):
                 if skip_zero_n and n_raw_val == 0:
                     continue
+                # ── heartbeat + soft-timeout ──────────────────────────────────
+                _now = time.monotonic()
+                if _now - last_hb >= _KEEPALIVE_SEC:
+                    yield _SSE_KEEPALIVE
+                    last_hb = _now
+                if _now - t_start >= _SOFT_TIMEOUT:
+                    yield sse({"type": "done", "total_solutions": solutions_found,
+                               "n_with_solutions": n_with_solutions,
+                               "timed_out": True, "timed_out_at_n": n_disp})
+                    return
 
                 batch: list[dict] = []
                 seen_xy: set      = set()
@@ -1016,13 +1168,36 @@ def api_diophantine():  # noqa: C901
                             flt_c.pop(0)
                         if len(flt_c) < 2:
                             continue
-                        approx_roots = np.roots(flt_c)
+
+                        # For large coefficients numpy.roots() (float64 companion-
+                        # matrix eigenvalues) loses precision.  Switch to mpmath
+                        # arbitrary-precision polynomial root-finding, which remains
+                        # accurate when coefficients differ by > 10^8 − enabling
+                        # detection of integer solutions with very large y values.
+                        _max_c = max(abs(c) for c in flt_c if c != 0.0)
+                        if _MPMATH and _max_c > 1e8:
+                            try:
+                                _mp_c = [_mpmath.mpf(c) for c in flt_c]
+                                _mp_roots = _mpmath.polyroots(_mp_c,
+                                                              maxsteps=200,
+                                                              extraprec=40)
+                                approx_roots = [complex(r) for r in _mp_roots]
+                            except Exception:  # noqa: BLE001
+                                approx_roots = list(np.roots(flt_c))
+                        else:
+                            approx_roots = list(np.roots(flt_c))
+
                         y_cands: set[int] = set()
                         for r in approx_roots:
                             if abs(r.imag) < 0.5:
                                 yr = r.real
                                 y_cands.add(math.floor(yr))
                                 y_cands.add(math.ceil(yr))
+                                # For very large roots, also check ±1 neighbourhood
+                                # in case mpmath precision still leaves a small gap
+                                if abs(yr) > 1e9:
+                                    y_cands.add(math.floor(yr) - 1)
+                                    y_cands.add(math.ceil(yr) + 1)
                     except Exception:  # noqa: BLE001
                         continue
 
@@ -1060,6 +1235,16 @@ def api_diophantine():  # noqa: C901
             for idx, (n_raw_val, n_disp) in enumerate(n_raw):
                 if skip_zero_n and n_raw_val == 0:
                     continue
+                # ── heartbeat + soft-timeout ──────────────────────────────────
+                _now = time.monotonic()
+                if _now - last_hb >= _KEEPALIVE_SEC:
+                    yield _SSE_KEEPALIVE
+                    last_hb = _now
+                if _now - t_start >= _SOFT_TIMEOUT:
+                    yield sse({"type": "done", "total_solutions": solutions_found,
+                               "n_with_solutions": n_with_solutions,
+                               "timed_out": True, "timed_out_at_n": n_disp})
+                    return
 
                 batch: list[dict] = []
                 seen_set: set     = set()
@@ -1128,6 +1313,16 @@ def api_diophantine():  # noqa: C901
             for idx, (n_raw_val, n_disp) in enumerate(n_raw):
                 if skip_zero_n and n_raw_val == 0:
                     continue
+                # ── heartbeat + soft-timeout ──────────────────────────────────
+                _now = time.monotonic()
+                if _now - last_hb >= _KEEPALIVE_SEC:
+                    yield _SSE_KEEPALIVE
+                    last_hb = _now
+                if _now - t_start >= _SOFT_TIMEOUT:
+                    yield sse({"type": "done", "total_solutions": solutions_found,
+                               "n_with_solutions": n_with_solutions,
+                               "timed_out": True, "timed_out_at_n": n_disp})
+                    return
 
                 batch: list[dict] = []
                 n_float = float(n_raw_val)
