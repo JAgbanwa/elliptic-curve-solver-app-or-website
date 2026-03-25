@@ -1304,14 +1304,17 @@ function buildBoundsLines(forLatex) {
   const isG = m.mode === "gen";
   const lines = [];
 
+  // Helper: translated string with English fallback
+  const T = (key, fallback) => (typeof t === "function") ? (t(key) || fallback) : fallback;
+
   // Equation
   if (forLatex) {
     const eqTex = m.equation
       .replace(/\*\*/g, "^").replace(/\*/g, " \\cdot ")
       .replace(/y\u00b2/g, "y^2");
-    lines.push(`\\textbf{Equation:} $${eqTex}$`);
+    lines.push(`\\textbf{${T("bp-equation","Equation:")}} $${eqTex}$`);
   } else {
-    lines.push(`Equation: ${m.equation}`);
+    lines.push(`${T("bp-equation","Equation:")} ${m.equation}`);
   }
 
   // n range
@@ -1320,17 +1323,17 @@ function buildBoundsLines(forLatex) {
     : "";
   if (m.nMin === m.nMax) {
     lines.push(forLatex
-      ? `\\textbf{Parameter } $n$\\textbf{:} fixed at $n = ${m.nMin}$${nDesc}`
-      : `Parameter n: fixed at n = ${m.nMin}${nDesc}`);
+      ? `\\textbf{${T("bp-param-n","Parameter n:")}} \\textbf{${T("bp-param-n-fixed","fixed at n =")}} $n = ${m.nMin}$${nDesc}`
+      : `${T("bp-param-n","Parameter n:")} ${T("bp-param-n-fixed","fixed at n =")} ${m.nMin}${nDesc}`);
   } else {
     lines.push(forLatex
-      ? `\\textbf{Parameter } $n$\\textbf{:} $${m.nMin} \\leq n \\leq ${m.nMax}$${nDesc ? ` ${nDesc}` : ""}`
-      : `Parameter n: ${m.nMin} \u2264 n \u2264 ${m.nMax}${nDesc}`);
+      ? `\\textbf{${T("bp-param-n","Parameter n:")}} $${m.nMin} \\leq n \\leq ${m.nMax}$${nDesc ? ` ${nDesc}` : ""}`
+      : `${T("bp-param-n","Parameter n:")} ${m.nMin} \u2264 n \u2264 ${m.nMax}${nDesc}`);
   }
   if (m.nCount) {
     lines.push(forLatex
-      ? `\\textbf{Curves searched:} ${m.nCount.toLocaleString()}`
-      : `Curves searched: ${m.nCount.toLocaleString()}`);
+      ? `\\textbf{${T("bp-curves-searched","Curves searched:")}} ${m.nCount.toLocaleString()}`
+      : `${T("bp-curves-searched","Curves searched:")} ${m.nCount.toLocaleString()}`);
   }
 
   // x range
@@ -1338,41 +1341,41 @@ function buildBoundsLines(forLatex) {
     switch (m.xMode) {
       case "fixed":
         lines.push(forLatex
-          ? `\\textbf{Variable } $x$\\textbf{:} $${m.xMin} \\leq x \\leq ${m.xMax}$`
-          : `Variable x: ${m.xMin} \u2264 x \u2264 ${m.xMax}`);
+          ? `\\textbf{${T("bp-variable-x","Variable x:")}} $${m.xMin} \\leq x \\leq ${m.xMax}$`
+          : `${T("bp-variable-x","Variable x:")} ${m.xMin} \u2264 x \u2264 ${m.xMax}`);
         break;
       case "autoscale":
         lines.push(forLatex
-          ? `\\textbf{Variable } $x$\\textbf{:} auto-scaled, $|x| \\leq k|n|$ with $k = ${m.xScaleFactor}$`
-          : `Variable x: auto-scaled, |x| \u2264 k|n| with k = ${m.xScaleFactor}`);
+          ? `\\textbf{${T("bp-variable-x","Variable x:")}} ${T("bp-x-autoscaled","auto-scaled, |x| \u2264 k|n| with k =")} $k = ${m.xScaleFactor}$`
+          : `${T("bp-variable-x","Variable x:")} ${T("bp-x-autoscaled","auto-scaled, |x| \u2264 k|n| with k =")} ${m.xScaleFactor}`);
         break;
       case "window":
         lines.push(forLatex
-          ? `\\textbf{Variable } $x$\\textbf{:} smart window centred on $${m.xCenterExpr}$, half-width $${m.xHalfWidth}$`
-          : `Variable x: smart window centred on ${m.xCenterExpr} \u00b1 ${m.xHalfWidth}`);
+          ? `\\textbf{${T("bp-variable-x","Variable x:")}} ${T("bp-x-window","smart window centred on")} $${m.xCenterExpr}$, ${T("bp-x-window-hw","half-width")} $${m.xHalfWidth}$`
+          : `${T("bp-variable-x","Variable x:")} ${T("bp-x-window","smart window centred on")} ${m.xCenterExpr} \u00b1 ${m.xHalfWidth}`);
         break;
       case "divisor":
         lines.push(forLatex
-          ? `\\textbf{Variable } $x$\\textbf{:} divisor search, $x \\mid P(n) = ${m.xDivisorPoly}$, $|x| \\leq ${m.xDivisorMax}$`
-          : `Variable x: divisor search, x | P(n) = ${m.xDivisorPoly}, |x| \u2264 ${m.xDivisorMax}`);
+          ? `\\textbf{${T("bp-variable-x","Variable x:")}} ${T("bp-x-divisor","divisor search, x | P(n) =")} ${m.xDivisorPoly}$, $${T("bp-x-divisor-max","|x| \u2264")} ${m.xDivisorMax}$`
+          : `${T("bp-variable-x","Variable x:")} ${T("bp-x-divisor","divisor search, x | P(n) =")} ${m.xDivisorPoly}, ${T("bp-x-divisor-max","|x| \u2264")} ${m.xDivisorMax}`);
         break;
       case "exprrange":
         lines.push(forLatex
-          ? `\\textbf{Variable } $x$\\textbf{:} expression range $[${m.xStartExpr},\\, ${m.xEndExpr}]$, step $${m.xStepExpr}$`
-          : `Variable x: expression range [${m.xStartExpr}, ${m.xEndExpr}], step ${m.xStepExpr}`);
+          ? `\\textbf{${T("bp-variable-x","Variable x:")}} ${T("bp-x-exprrange","expression range")} $[${m.xStartExpr},\\, ${m.xEndExpr}]$, ${T("bp-x-step","step")} $${m.xStepExpr}$`
+          : `${T("bp-variable-x","Variable x:")} ${T("bp-x-exprrange","expression range")} [${m.xStartExpr}, ${m.xEndExpr}], ${T("bp-x-step","step")} ${m.xStepExpr}`);
         break;
     }
   } else {
     lines.push(forLatex
-      ? `\\textbf{Variable } $x$\\textbf{:} $${m.xMin} \\leq x \\leq ${m.xMax}$`
-      : `Variable x: ${m.xMin} \u2264 x \u2264 ${m.xMax}`);
+      ? `\\textbf{${T("bp-variable-x","Variable x:")}} $${m.xMin} \\leq x \\leq ${m.xMax}$`
+      : `${T("bp-variable-x","Variable x:")} ${m.xMin} \u2264 x \u2264 ${m.xMax}`);
   }
 
   // y range (gen mode)
   if (isG && m.yMin !== null) {
     lines.push(forLatex
-      ? `\\textbf{Variable } $y$\\textbf{:} $${m.yMin} \\leq y \\leq ${m.yMax}$`
-      : `Variable y: ${m.yMin} \u2264 y \u2264 ${m.yMax}`);
+      ? `\\textbf{${T("bp-variable-y","Variable y:")}} $${m.yMin} \\leq y \\leq ${m.yMax}$`
+      : `${T("bp-variable-y","Variable y:")} ${m.yMin} \u2264 y \u2264 ${m.yMax}`);
   }
 
   // Height bound note
@@ -1380,15 +1383,15 @@ function buildBoundsLines(forLatex) {
                       : (m.xMode === "fixed" ? Math.max(Math.abs(+m.xMax), Math.abs(+m.xMin)) : "\u221e (adaptive)");
   if (m.xMode === "fixed" || isG) {
     lines.push(forLatex
-      ? `\\textbf{Naive height bound:} $|x| \\leq ${xAbsMax}$${isG && m.yMax !== null ? `, $|y| \\leq ${Math.max(Math.abs(+m.yMax), Math.abs(+m.yMin))}$` : ""}`
-      : `Naive height bound: |x| \u2264 ${xAbsMax}${isG && m.yMax !== null ? `, |y| \u2264 ${Math.max(Math.abs(+m.yMax), Math.abs(+m.yMin))}` : ""}`);
+      ? `\\textbf{${T("bp-height-bound","Naive height bound: |x| \u2264")}} $${xAbsMax}$${isG && m.yMax !== null ? `, $|y| \\leq ${Math.max(Math.abs(+m.yMax), Math.abs(+m.yMin))}$` : ""}`
+      : `${T("bp-height-bound","Naive height bound: |x| \u2264")} ${xAbsMax}${isG && m.yMax !== null ? `, |y| \u2264 ${Math.max(Math.abs(+m.yMax), Math.abs(+m.yMin))}` : ""}`);
     lines.push(forLatex
-      ? `\\textbf{Search is exhaustive} within the stated bounds`
-      : `Search is exhaustive within the stated bounds`);
+      ? `\\textbf{${T("bp-exhaustive","Search is exhaustive within the stated bounds")}}`
+      : T("bp-exhaustive","Search is exhaustive within the stated bounds"));
   } else {
     lines.push(forLatex
-      ? `\\textbf{Search is exhaustive} within the stated $x$-range for each $n$`
-      : `Search is exhaustive within the stated x-range for each n`);
+      ? `\\textbf{${T("bp-exhaustive-x","Search is exhaustive within the stated x-range for each n")}}`
+      : T("bp-exhaustive-x","Search is exhaustive within the stated x-range for each n"));
   }
 
   // Constraints
@@ -1397,14 +1400,25 @@ function buildBoundsLines(forLatex) {
   if (m.skipZeroX) constraints.push("x \u2260 0");
   if (constraints.length) {
     lines.push(forLatex
-      ? `\\textbf{Constraints:} $${constraints.join(",\\; ")}$`
-      : `Constraints: ${constraints.join(", ")}`);
+      ? `\\textbf{${T("bp-constraints","Constraints:")}} $${constraints.join(",\\; ")}$`
+      : `${T("bp-constraints","Constraints:")} ${constraints.join(", ")}`);
   }
 
   // Strategy
-  const strategyLabel = {
-    "": "fixed-range y²=f(n,x) scan",
-    "fixed": "fixed-range y²=f(n,x) scan",
+  const stratKey = {
+    "": "strat-fixed",
+    "fixed": "strat-fixed",
+    "autoscale": "strat-autoscale",
+    "window": "strat-window",
+    "divisor": "strat-divisor",
+    "exprrange": "strat-exprrange",
+    "poly_y": "strat-poly_y",
+    "brute3": "strat-brute3",
+    "brute2": "strat-brute2",
+  }[m.strategy] || null;
+  const stratFallback = {
+    "": "fixed-range y\u00b2=f(n,x) scan",
+    "fixed": "fixed-range y\u00b2=f(n,x) scan",
     "autoscale": "auto-scaled x range",
     "window": "smart window (exact big-integer)",
     "divisor": "divisor search",
@@ -1413,15 +1427,16 @@ function buildBoundsLines(forLatex) {
     "brute3": "3D brute-force (general Diophantine)",
     "brute2": "2-variable scan (general Diophantine)",
   }[m.strategy] || m.strategy;
+  const strategyLabel = stratKey ? T(stratKey, stratFallback) : stratFallback;
   lines.push(forLatex
-    ? `\\textbf{Search strategy:} ${strategyLabel}`
-    : `Search strategy: ${strategyLabel}`);
+    ? `\\textbf{${T("bp-strategy","Search strategy:")}} ${strategyLabel}`
+    : `${T("bp-strategy","Search strategy:")} ${strategyLabel}`);
 
   // Total evals
   if (m.totalEvals) {
     lines.push(forLatex
-      ? `\\textbf{Total evaluations:} ${m.totalEvals.toLocaleString()}`
-      : `Total evaluations: ${m.totalEvals.toLocaleString()}`);
+      ? `\\textbf{${T("bp-total-evals","Total evaluations:")}} ${m.totalEvals.toLocaleString()}`
+      : `${T("bp-total-evals","Total evaluations:")} ${m.totalEvals.toLocaleString()}`);
   }
 
   // Compute time
@@ -1431,8 +1446,8 @@ function buildBoundsLines(forLatex) {
                   : ms < 60000 ? `${(ms / 1000).toFixed(2)} s`
                   : `${Math.floor(ms / 60000)} min ${((ms % 60000) / 1000).toFixed(1)} s`;
     lines.push(forLatex
-      ? `\\textbf{Compute time:} ${timeStr}`
-      : `Compute time: ${timeStr}`);
+      ? `\\textbf{${T("bp-compute-time","Compute time:")}} ${timeStr}`
+      : `${T("bp-compute-time","Compute time:")} ${timeStr}`);
   }
 
   return lines;

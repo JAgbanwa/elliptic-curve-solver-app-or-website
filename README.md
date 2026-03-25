@@ -56,9 +56,10 @@ python3 app.py
   - **Non-polynomial y** (e.g. `x^y = n`) — integer points plotted as a scatter with a note explaining the curve shape is unavailable
   - Caption identifies the strategy (`ec`, `poly_y`, `brute3`, …) so you always know what was drawn and why
 - **CSV, PDF & LaTeX export** — download results as a spreadsheet, print to PDF, or export a ready-to-compile `.tex` file with full search-parameter metadata (bounds, compute time, strategy, exhaustiveness statement); PDF export embeds the curve plot as a PNG image; LaTeX export includes a full `pgfplots` tikzpicture
-- **Multi-language support (i18n)** — the entire UI, including hero section, controls, status messages, "How It Works", example cards, and export file headers/section names, can be switched to any of **8 languages** via the language selector in the header:
+- **Multi-language support (i18n)** — the entire UI, including hero section, controls, status messages, "How It Works", example cards, export file headers/section titles, and all search-parameter report lines (PDF & LaTeX), can be switched to any of **12 languages** via the language selector in the header:
   - 🌐 English, 🇳🇱 Nederlands, 🇫🇷 Français, 🇩🇪 Deutsch, 🇪🇸 Español, 🇧🇷 Português, 🇸🇦 العربية (with RTL), 🇨🇳 中文
-  - Exported CSV filenames, PDF headers, and LaTeX section titles are all translated to the selected language
+  - 🇹🇿 Kiswahili, 🇳🇬 Igbo, 🇳🇬 Yorùbá, 🇬🇭 Akan (Twi)
+  - Exported CSV filenames, PDF headers, LaTeX section titles, and every search-parameter line (equation, n/x/y bounds, strategy, compute time, etc.) are all translated to the selected language
   - Language choice is saved in localStorage and remembered across sessions
 - **Light / Dark mode** — toggle in the header; remembers your preference via localStorage; curve colours re-render automatically on theme change
 - **21 built-in examples** spanning both solver modes — click any card to instantly load and run the search
@@ -150,10 +151,13 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
 ├── requirements.txt
 ├── templates/
 │   └── index.html           # Single-page UI (two solver modes, KaTeX, hero section,
-│                            #   canvas curve plot, export buttons)
+│                            #   canvas curve plot, export buttons, language selector)
 └── static/
     ├── css/main.css         # Includes plot-section, legend and print/PDF plot styles
-    └── js/main.js           # loadPlot(), renderPlot(), _fmtNum(); LaTeX pgfplots export
+    ├── js/i18n.js           # Translations for 12 languages; t(), applyTranslations(),
+    │                        #   setLanguage(); RTL support for Arabic; localStorage
+    └── js/main.js           # loadPlot(), renderPlot(), _fmtNum(); LaTeX pgfplots export;
+                             #   buildBoundsLines() uses t() for search-param report lines
 ```
 
 ---
