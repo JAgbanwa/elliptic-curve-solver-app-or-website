@@ -62,6 +62,7 @@ python3 app.py
   - Exported CSV filenames, PDF headers, LaTeX section titles, and every search-parameter line (equation, n/x/y bounds, strategy, compute time, etc.) are all translated to the selected language
   - Language choice is saved in localStorage and remembered across sessions
 - **Light / Dark mode** — toggle in the header; remembers your preference via localStorage; curve colours re-render automatically on theme change
+- **Search history** — every completed search is auto-saved to localStorage (up to 50 entries); a slide-in history drawer (⏱ button) lets you browse past searches, **Restore** any entry to reload all form fields and results instantly without re-running, delete individual entries, or clear all history; badge on the button shows how many searches are saved
 - **21 built-in examples** spanning both solver modes — click any card to instantly load and run the search
 
 ---
@@ -157,7 +158,8 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
     ├── js/i18n.js           # Translations for 12 languages; t(), applyTranslations(),
     │                        #   setLanguage(); RTL support for Arabic; localStorage
     └── js/main.js           # loadPlot(), renderPlot(), _fmtNum(); LaTeX pgfplots export;
-                             #   buildBoundsLines() uses t() for search-param report lines
+                             #   buildBoundsLines() uses t() for search-param report lines;
+                             #   search history (save/restore/delete via localStorage)
 ```
 
 ---
