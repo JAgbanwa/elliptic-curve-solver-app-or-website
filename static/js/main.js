@@ -1602,6 +1602,61 @@ ${searchMeta.pgfplots
   URL.revokeObjectURL(a.href);
 });
 
+/* ── BibTeX citation copy ── */
+function _showCopyToast(msg) {
+  const toast = document.getElementById("copy-toast");
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.classList.add("visible");
+  clearTimeout(toast._tid);
+  toast._tid = setTimeout(() => toast.classList.remove("visible"), 2600);
+}
+
+const btnExportBibtex = document.getElementById("btn-export-bibtex");
+if (btnExportBibtex) {
+  btnExportBibtex.addEventListener("click", () => {
+    const { eqStr } = buildExportMeta();
+    const year  = new Date().getFullYear();
+    const count = allSolutions.length;
+    const solWord = count !== 1 ? "solutions" : "solution";
+
+    // Sanitise equation for BibTeX: strip backslashes / braces that would break it
+    const eqSafe = eqStr.replace(/[{}\\]/g, " ").replace(/\s+/g, " ").trim();
+
+    // Build a short citekey: ecs + year + first 6 chars of equation (alphanum only)
+    const slug = eqStr.replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "curve";
+    const citekey = `ecs${year}${slug}`;
+
+    // Note line with search summary
+    const nRange = searchMeta
+      ? (searchMeta.nMin === searchMeta.nMax
+          ? `n = ${searchMeta.nMin}`
+          : `n \\in [${searchMeta.nMin},\\, ${searchMeta.nMax}]`)
+      : "";
+    const noteStr = `${count} integer ${solWord} found${nRange ? ` for \\(${nRange}\\)` : ""} via Elliptic Curve Solver.`;
+
+    const bibtex = `@misc{${citekey},
+  title        = {{Integer Points on the Diophantine Equation: ${eqSafe}}},
+  author       = {{Elliptic Curve Solver}},
+  year         = {${year}},
+  howpublished = {\\url{https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website}},
+  note         = {${noteStr}}
+}`;
+
+    navigator.clipboard.writeText(bibtex).then(() => {
+      _showCopyToast((typeof t === "function") ? t("bibtex-copied") : "BibTeX citation copied to clipboard!");
+      btnExportBibtex.textContent = (typeof t === "function") ? (t("bibtex-copied-btn") || "✓ Copied!") : "✓ Copied!";
+      setTimeout(() => {
+        btnExportBibtex.textContent = (typeof t === "function") ? (t("btn-export-bibtex") || "📄 Cite BibTeX") : "📄 Cite BibTeX";
+      }, 2200);
+    }).catch(() => {
+      // Fallback: open a small dialog with the text pre-selected
+      const msg = (typeof t === "function") ? t("bibtex-copy-fail") : "Copy the BibTeX below:";
+      prompt(msg, bibtex);
+    });
+  });
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    EXAMPLE CARDS
    ═══════════════════════════════════════════════════════════════════════════ */
