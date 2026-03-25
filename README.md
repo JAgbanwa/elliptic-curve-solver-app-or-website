@@ -55,6 +55,8 @@ python3 app.py
   - **General polynomial in y** — all real root-branches traced via `numpy.roots()`
   - **Non-polynomial y** (e.g. `x^y = n`) — integer points plotted as a scatter with a note explaining the curve shape is unavailable
   - Caption identifies the strategy (`ec`, `poly_y`, `brute3`, …) so you always know what was drawn and why
+  - **Automatic zoom to solutions** — the plot window always centres on the found integer points, regardless of how large their coordinates are; a solution at x = 10⁶ or y = 10⁹ is always visible and in frame
+  - **Exact integer labels** — all point labels and axis tick values are displayed as full precise integers (e.g. `(1234567, 9876543)`) — never abbreviated to scientific notation like `1.2e6`; the left margin widens automatically to accommodate long labels and x-tick density thins out to prevent overlapping
 - **CSV, PDF, LaTeX & BibTeX export** — download results as a spreadsheet, print to PDF, export a ready-to-compile `.tex` file, or **copy a BibTeX `@misc` citation** to the clipboard with one click; PDF export embeds the curve plot as a PNG image; LaTeX export includes a full `pgfplots` tikzpicture; BibTeX entry includes a generated citekey, equation title, year, GitHub URL, solution count, and n-range note — button text flips to ✓ Copied! with a slide-up toast notification
 - **Large-range robustness** — searches over millions of values no longer drop with "Connection error":
   - **SSE keepalive heartbeat** — `: keepalive` SSE comments sent every 9 s keep the HTTP pipe alive through reverse proxies and browser idle-timeout heuristics
@@ -163,7 +165,10 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
     ├── css/main.css         # Includes plot-section, legend and print/PDF plot styles
     ├── js/i18n.js           # Translations for 12 languages; t(), applyTranslations(),
     │                        #   setLanguage(); RTL support for Arabic; localStorage
-    └── js/main.js           # loadPlot(), renderPlot(), _fmtNum(); CSV/PDF/LaTeX/BibTeX
+    └── js/main.js           # loadPlot() centres on solutions (large-coord aware);
+                             #   renderPlot() with exact-integer _fmtNum(), dynamic
+                             #   PAD_L margin, adaptive x-tick density; sol_labels
+                             #   from /api/plot displayed verbatim; CSV/PDF/LaTeX/BibTeX
                              #   export handlers; _showCopyToast(); buildBoundsLines()
                              #   uses t() for search-param report lines;
                              #   search history (save/restore/delete via localStorage)

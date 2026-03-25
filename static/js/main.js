@@ -911,20 +911,33 @@ async function loadPlot() {
     }
   }
 
-  // Expand range to fully contain all found solution x values
-  const solXs = allSolutions.map(s => parseFloat(s.x)).filter(Number.isFinite);
-  if (solXs.length) {
-    const lo = Math.min(...solXs), hi = Math.max(...solXs);
-    const pad = Math.max(5, (hi - lo) * 0.15);
-    xMin = Math.min(xMin, lo - pad);
-    xMax = Math.max(xMax, hi + pad);
-  }
+  // Build the x window to send to the server.
+  // Priority: centre tightly on solutions for the chosen n so that large-
+  // coordinate solutions (e.g. x = 10^6, y = 10^9) are always visible.
+  // Fall back to the search-input range only when no solutions were found.
+  const solsForNXs = allSolutions
+    .filter(s => String(s.n) === plotN)
+    .map(s => parseFloat(s.x)).filter(Number.isFinite);
 
-  // Clamp to a sensible plotting span
-  const span = xMax - xMin;
-  if (span > 4000) {
-    const cx = (xMin + xMax) / 2;
-    xMin = cx - 200; xMax = cx + 200;
+  if (solsForNXs.length) {
+    const lo     = Math.min(...solsForNXs), hi = Math.max(...solsForNXs);
+    const solSpan = Math.max(hi - lo, 1);
+    const center  = (lo + hi) / 2;
+    // Padding: 20 % of solution spread, at least 5, at most 0.5 % of |centre|
+    const absPad  = Math.max(5, solSpan * 0.2, Math.abs(center) * 0.005);
+    xMin = lo - absPad;
+    xMax = hi + absPad;
+    // Cap to 2000 wide so the server doesn't over-sample
+    if (xMax - xMin > 2000) {
+      xMin = center - 1000;
+      xMax = center + 1000;
+    }
+  } else {
+    // No solutions: keep search range but cap to a reasonable span
+    if (xMax - xMin > 4000) {
+      const cx = (xMin + xMax) / 2;
+      xMin = cx - 200; xMax = cx + 200;
+    }
   }
 
   // Solutions for the chosen n value only (so points lie on the drawn curve)
@@ -987,7 +1000,17 @@ function renderPlot() {
   const ctx = canvas.getContext("2d");
   ctx.scale(dpr, dpr);
 
-  const PAD_L = 54, PAD_R = 20, PAD_T = 24, PAD_B = 38;
+  const NX = 8, NY = 6;
+  // Dynamically widen the left margin so y-tick labels (which can be large
+  // integers like "1000000") never get clipped.  Estimate ~7.5 px per char
+  // for 11 px sans-serif.
+  const _yTicks = [];
+  for (let i = 0; i <= NY; i += 2) {
+    _yTicks.push(_fmtNum(y_max - (i / NY) * (y_max - y_min)));
+  }
+  const _maxYLabelPx = Math.max(..._yTicks.map(s => s.length)) * 7.5;
+  const PAD_L = Math.max(54, Math.ceil(_maxYLabelPx) + 12);
+  const PAD_R = 20, PAD_T = 24, PAD_B = 38;
   const PW = W - PAD_L - PAD_R;
   const PH = H - PAD_T - PAD_B;
 
@@ -1006,7 +1029,6 @@ function renderPlot() {
   ctx.strokeStyle = isDark ? "#21262d" : "#e5e7eb";
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 4]);
-  const NX = 8, NY = 6;
   for (let i = 0; i <= NX; i++) {
     const gx = PAD_L + (i / NX) * PW;
     ctx.beginPath(); ctx.moveTo(gx, PAD_T); ctx.lineTo(gx, PAD_T + PH); ctx.stroke();
@@ -1032,8 +1054,13 @@ function renderPlot() {
   // Axis tick labels
   ctx.fillStyle = isDark ? "#8b949e" : "#6b7280";
   ctx.font = "11px sans-serif";
+  // For x-axis: thin out ticks when labels are wide so they don't overlap.
+  // Each tick slot is PW/NX pixels wide; a char is ~7.5 px at 11 px font.
+  const _sampleXLbl = _fmtNum(x_min + 0.5 * (x_max - x_min));
+  const _xLblPx     = _sampleXLbl.length * 7.5;
+  const _xStep      = _xLblPx > (PW / NX) * 0.9 ? 4 : 2;
   ctx.textAlign = "center"; ctx.textBaseline = "top";
-  for (let i = 0; i <= NX; i += 2) {
+  for (let i = 0; i <= NX; i += _xStep) {
     const gx  = PAD_L + (i / NX) * PW;
     const val = x_min + (i / NX) * (x_max - x_min);
     ctx.fillText(_fmtNum(val), gx, PAD_T + PH + 5);
@@ -1075,7 +1102,11 @@ function renderPlot() {
   for (const seg of neg_segments) drawSeg(seg);
 
   // Integer solution points + labels (also clipped to plot area)
-  for (const [sx, sy] of sol_points) {
+  // Use exact integer strings from sol_labels when available so that labels
+  // show full values (e.g. "12345678" not "1.2e7") even for large coordinates.
+  const sol_labels = plotData.sol_labels || [];
+  for (let i = 0; i < sol_points.length; i++) {
+    const [sx, sy] = sol_points[i];
     const px = tx(sx), py = ty(sy);
     // dot
     ctx.fillStyle   = "#ef4444";
@@ -1084,7 +1115,9 @@ function renderPlot() {
     ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     // (x, y) label
     if (showPointLabels) {
-      const lx = _fmtNum(sx), ly = _fmtNum(sy);
+      const linfo = sol_labels[i] || {};
+      const lx    = linfo.x !== undefined ? linfo.x : _fmtNum(sx);
+      const ly    = linfo.y !== undefined ? linfo.y : _fmtNum(sy);
       const label = `(${lx}, ${ly})`;
       ctx.font = "bold 11px sans-serif";
       const tw = ctx.measureText(label).width;
@@ -1131,12 +1164,13 @@ function renderPlot() {
 
 function _fmtNum(v) {
   if (!Number.isFinite(v)) return "";
-  const a = Math.abs(v);
-  if (a >= 1e15)  return v.toExponential(2);
-  if (a >= 10000) return v.toExponential(1);
-  if (a >= 100)   return Math.round(v).toString();
-  if (Number.isInteger(v)) return v.toString();
-  return v.toFixed(1);
+  // Always show exact integer value — no scientific notation, no abbreviation.
+  const rounded = Math.round(v);
+  if (Math.abs(v - rounded) <= 1e-9 * (Math.abs(v) || 1)) {
+    return rounded.toString();
+  }
+  // Non-integer: enough significant figures, strip trailing zeros.
+  return parseFloat(v.toPrecision(6)).toString();
 }
 
 /** Zoom the current viewport in or out centered on the plot midpoint. */
