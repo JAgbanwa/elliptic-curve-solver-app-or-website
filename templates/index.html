@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=24" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=22" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -69,9 +69,6 @@
           <option value="ig">🇳🇬 Igbo</option>
           <option value="yo">🇳🇬 Yorùbá</option>
           <option value="ak">🇬🇭 Akan (Twi)</option>
-            <option value="gaa">🇬🇭 Ga</option>
-            <option value="ee">🇬🇭 Ewe</option>
-            <option value="dag">🇬🇭 Dagbani</option>
         </select>
         <button id="btn-theme-toggle" class="btn-theme-toggle" type="button" title="Switch to light mode" aria-label="Toggle theme">
           <span class="theme-icon">☀️</span>
@@ -563,6 +560,7 @@
             <span class="plot-legend-curve">&#x2014; Curve</span>
             <span class="plot-legend-points">&#9679; Integer points found</span>
           </div>
+          <pre id="plot-debug" class="plot-debug" style="margin-top:8px;padding:8px;background:#fffbeb;border:1px solid #f6e05e;color:#92400e;display:none;white-space:pre-wrap;font-family:monospace;font-size:13px"></pre>
           <p id="plot-caption" class="plot-caption"></p>
         </div>
       </div>
@@ -677,7 +675,7 @@
     <div id="history-list" class="history-list"></div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=24"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=24"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=22"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=22"></script>
 </body>
 </html>

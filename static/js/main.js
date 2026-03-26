@@ -886,15 +886,10 @@ function buildDiophURL() {
 async function loadPlot() {
   const isGen = currentSolverMode === "gen";
 
-  // Choose n value for the curve: first solution's n, or midpoint of n range
-  let plotN;
-  if (allSolutions.length > 0) {
-    plotN = String(allSolutions[0].n);
-  } else {
-    const nm = parseFloat(searchMeta.nMin || "0");
-    const nx = parseFloat(searchMeta.nMax || "0");
-    plotN = String(Math.round((nm + nx) / 2));
-  }
+
+  // Determine if this is a 2-variable search (n fixed or absent)
+  const isEC2var = !isGen && ecVarMode === "2var";
+  const isGen2var = isGen && (genVarMode === "2var" || (searchMeta.nMin === searchMeta.nMax));
 
   // Compute x plot range from search params, then expand to include solutions
   let xMin, xMax;
@@ -911,39 +906,40 @@ async function loadPlot() {
     }
   }
 
-  // Build the x window to send to the server.
-  // Priority: centre tightly on solutions for the chosen n so that large-
-  // coordinate solutions (e.g. x = 10^6, y = 10^9) are always visible.
-  // Fall back to the search-input range only when no solutions were found.
-  const solsForNXs = allSolutions
-    .filter(s => String(s.n) === plotN)
-    .map(s => parseFloat(s.x)).filter(Number.isFinite);
-
-  if (solsForNXs.length) {
-    const lo     = Math.min(...solsForNXs), hi = Math.max(...solsForNXs);
-    const solSpan = Math.max(hi - lo, 1);
-    const center  = (lo + hi) / 2;
-    // Padding: 20 % of solution spread, at least 5, at most 0.5 % of |centre|
-    const absPad  = Math.max(5, solSpan * 0.2, Math.abs(center) * 0.005);
-    xMin = lo - absPad;
-    xMax = hi + absPad;
-    // Cap to 2000 wide so the server doesn't over-sample
-    if (xMax - xMin > 2000) {
-      xMin = center - 1000;
-      xMax = center + 1000;
-    }
-  } else {
-    // No solutions: keep search range but cap to a reasonable span
-    if (xMax - xMin > 4000) {
-      const cx = (xMin + xMax) / 2;
-      xMin = cx - 200; xMax = cx + 200;
-    }
+  // Expand range to fully contain all found solution x values
+  const solXs = allSolutions.map(s => parseFloat(s.x)).filter(Number.isFinite);
+  if (solXs.length) {
+    const lo = Math.min(...solXs), hi = Math.max(...solXs);
+    const pad = Math.max(5, (hi - lo) * 0.15);
+    xMin = Math.min(xMin, lo - pad);
+    xMax = Math.max(xMax, hi + pad);
   }
 
-  // Solutions for the chosen n value only (so points lie on the drawn curve)
-  const solsForN = allSolutions
-    .filter(s => String(s.n) === plotN)
-    .map(s => ({ x: s.x, y: s.y }));
+  // Clamp to a sensible plotting span
+  const span = xMax - xMin;
+  if (span > 4000) {
+    const cx = (xMin + xMax) / 2;
+    xMin = cx - 200; xMax = cx + 200;
+  }
+
+  // If 2-variable mode (n fixed or absent), plot all solutions; else, plot for first n
+  let plotN;
+  let solsForN;
+  if (isEC2var || isGen2var) {
+    // n is fixed or absent, plot all (x, y)
+    solsForN = allSolutions.map(s => ({ x: s.x, y: s.y }));
+    plotN = allSolutions.length > 0 ? String(allSolutions[0].n ?? "") : (searchMeta.nMin || "0");
+  } else {
+    // n varies, plot for first n with solutions (or midpoint if none)
+    if (allSolutions.length > 0) {
+      plotN = String(allSolutions[0].n);
+    } else {
+      const nm = parseFloat(searchMeta.nMin || "0");
+      const nx = parseFloat(searchMeta.nMax || "0");
+      plotN = String(Math.round((nm + nx) / 2));
+    }
+    solsForN = allSolutions.filter(s => String(s.n) === plotN).map(s => ({ x: s.x, y: s.y }));
+  }
 
   const body = { mode: isGen ? "gen" : "ec", n_val: plotN,
                  x_min: xMin, x_max: xMax, solutions: solsForN };
@@ -951,29 +947,70 @@ async function loadPlot() {
   else        { body.expr = exprInput.value.trim(); }
 
   try {
+    // Debug: show request body in UI and console
+    try {
+      const dbgEl = document.getElementById("plot-debug");
+      if (dbgEl) { dbgEl.style.display = "block"; dbgEl.textContent = "Sending to /api/plot:\n" + JSON.stringify(body, null, 2); }
+    } catch (_) {}
+    console.log("/api/plot request:", body);
     const resp = await fetch("/api/plot", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify(body),
     });
     const data = await resp.json();
+    // Debug: update UI with response summary
+    try {
+      const dbgEl = document.getElementById("plot-debug");
+      if (dbgEl) {
+        const respSummary = {
+          ok: data.ok,
+          pos_segments: (data.pos_segments || []).length,
+          neg_segments: (data.neg_segments || []).length,
+          sol_points: (data.sol_points || []).length,
+          x_min: data.x_min, x_max: data.x_max, y_min: data.y_min, y_max: data.y_max,
+        };
+        dbgEl.textContent = "Sent:\n" + JSON.stringify(body, null, 2)
+                         + "\n\nResponse:\n" + JSON.stringify(respSummary, null, 2)
+                         + "\n\nFirst sol_points:\n" + JSON.stringify((data.sol_points || []).slice(0,10), null, 2);
+      }
+    } catch (_) {}
+    console.log("/api/plot response:", data);
     if (data.ok) {
       // Don't open an empty panel — nothing useful to render
       const hasAnything = data.pos_segments.length > 0
                        || data.neg_segments.length > 0
                        || data.sol_points.length  > 0;
-      if (!hasAnything) return;
-      plotData = data;
-      viewport = { xMin: data.x_min, xMax: data.x_max, yMin: data.y_min, yMax: data.y_max };
-      const _lblBtn = document.getElementById("btn-toggle-labels");
-      if (_lblBtn) _lblBtn.textContent = showPointLabels ? "Hide labels" : "Show labels";
-      searchMeta.pgfplots = data.pgfplots;
-      searchMeta.eqLatex  = data.eq_latex;
+      // Always show plot section if there are any solutions, even if curve is missing
       const sec = document.getElementById("plot-section");
-      if (sec) sec.style.display = "";
-      const lbl = document.getElementById("plot-n-label");
-      if (lbl) lbl.textContent = `n\u202f=\u202f${plotN}`;
-      renderPlot();
+      if (hasAnything || solsForN.length > 0) {
+        if (sec) sec.style.display = "";
+        plotData = data;
+        viewport = { xMin: data.x_min, xMax: data.x_max, yMin: data.y_min, yMax: data.y_max };
+        const _lblBtn = document.getElementById("btn-toggle-labels");
+        if (_lblBtn) _lblBtn.textContent = showPointLabels ? "Hide labels" : "Show labels";
+        searchMeta.pgfplots = data.pgfplots;
+        searchMeta.eqLatex  = data.eq_latex;
+        const lbl = document.getElementById("plot-n-label");
+        if (lbl) lbl.textContent = `n\u202f=\u202f${plotN}`;
+        renderPlot();
+      } else {
+        if (sec) sec.style.display = "";
+        // Show warning overlay if nothing to plot
+        const canvas = document.getElementById("curve-canvas");
+        if (canvas) {
+          const ctx = canvas.getContext("2d");
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.font = "bold 18px sans-serif";
+          ctx.fillStyle = "#b91c1c";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("No integer points to plot.", canvas.width/2, canvas.height/2 - 10);
+          ctx.font = "14px sans-serif";
+          ctx.fillStyle = "#b45309";
+          ctx.fillText("Check your equation or search range.", canvas.width/2, canvas.height/2 + 18);
+        }
+      }
     }
   } catch (_) {
     // Visualization is optional
@@ -1000,17 +1037,7 @@ function renderPlot() {
   const ctx = canvas.getContext("2d");
   ctx.scale(dpr, dpr);
 
-  const NX = 8, NY = 6;
-  // Dynamically widen the left margin so y-tick labels (which can be large
-  // integers like "1000000") never get clipped.  Estimate ~7.5 px per char
-  // for 11 px sans-serif.
-  const _yTicks = [];
-  for (let i = 0; i <= NY; i += 2) {
-    _yTicks.push(_fmtNum(y_max - (i / NY) * (y_max - y_min)));
-  }
-  const _maxYLabelPx = Math.max(..._yTicks.map(s => s.length)) * 7.5;
-  const PAD_L = Math.max(54, Math.ceil(_maxYLabelPx) + 12);
-  const PAD_R = 20, PAD_T = 24, PAD_B = 38;
+  const PAD_L = 54, PAD_R = 20, PAD_T = 24, PAD_B = 38;
   const PW = W - PAD_L - PAD_R;
   const PH = H - PAD_T - PAD_B;
 
@@ -1029,6 +1056,7 @@ function renderPlot() {
   ctx.strokeStyle = isDark ? "#21262d" : "#e5e7eb";
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 4]);
+  const NX = 8, NY = 6;
   for (let i = 0; i <= NX; i++) {
     const gx = PAD_L + (i / NX) * PW;
     ctx.beginPath(); ctx.moveTo(gx, PAD_T); ctx.lineTo(gx, PAD_T + PH); ctx.stroke();
@@ -1054,13 +1082,8 @@ function renderPlot() {
   // Axis tick labels
   ctx.fillStyle = isDark ? "#8b949e" : "#6b7280";
   ctx.font = "11px sans-serif";
-  // For x-axis: thin out ticks when labels are wide so they don't overlap.
-  // Each tick slot is PW/NX pixels wide; a char is ~7.5 px at 11 px font.
-  const _sampleXLbl = _fmtNum(x_min + 0.5 * (x_max - x_min));
-  const _xLblPx     = _sampleXLbl.length * 7.5;
-  const _xStep      = _xLblPx > (PW / NX) * 0.9 ? 4 : 2;
   ctx.textAlign = "center"; ctx.textBaseline = "top";
-  for (let i = 0; i <= NX; i += _xStep) {
+  for (let i = 0; i <= NX; i += 2) {
     const gx  = PAD_L + (i / NX) * PW;
     const val = x_min + (i / NX) * (x_max - x_min);
     ctx.fillText(_fmtNum(val), gx, PAD_T + PH + 5);
@@ -1102,22 +1125,18 @@ function renderPlot() {
   for (const seg of neg_segments) drawSeg(seg);
 
   // Integer solution points + labels (also clipped to plot area)
-  // Use exact integer strings from sol_labels when available so that labels
-  // show full values (e.g. "12345678" not "1.2e7") even for large coordinates.
-  const sol_labels = plotData.sol_labels || [];
-  for (let i = 0; i < sol_points.length; i++) {
-    const [sx, sy] = sol_points[i];
+  let drawnPoints = 0;
+  for (const [sx, sy] of sol_points) {
     const px = tx(sx), py = ty(sy);
     // dot
     ctx.fillStyle   = "#ef4444";
     ctx.strokeStyle = isDark ? "#161b22" : "#ffffff";
     ctx.lineWidth   = 2;
     ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    drawnPoints++;
     // (x, y) label
     if (showPointLabels) {
-      const linfo = sol_labels[i] || {};
-      const lx    = linfo.x !== undefined ? linfo.x : _fmtNum(sx);
-      const ly    = linfo.y !== undefined ? linfo.y : _fmtNum(sy);
+      const lx = _fmtNum(sx), ly = _fmtNum(sy);
       const label = `(${lx}, ${ly})`;
       ctx.font = "bold 11px sans-serif";
       const tw = ctx.measureText(label).width;
@@ -1134,6 +1153,17 @@ function renderPlot() {
       ctx.fillText(label, lxPos, lyPos);
     }
   }
+
+  // Debug overlay: show number of solution points sent and drawn
+  ctx.save();
+  ctx.font = "bold 13px monospace";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = isDark ? "#f59e42" : "#b45309";
+  const debugMsg = `sol_points: ${sol_points.length} | drawn: ${drawnPoints}`;
+  ctx.fillText(debugMsg, PAD_L + 8, PAD_T + 8);
+  ctx.restore();
 
   ctx.restore();
 
@@ -1164,13 +1194,12 @@ function renderPlot() {
 
 function _fmtNum(v) {
   if (!Number.isFinite(v)) return "";
-  // Always show exact integer value — no scientific notation, no abbreviation.
-  const rounded = Math.round(v);
-  if (Math.abs(v - rounded) <= 1e-9 * (Math.abs(v) || 1)) {
-    return rounded.toString();
-  }
-  // Non-integer: enough significant figures, strip trailing zeros.
-  return parseFloat(v.toPrecision(6)).toString();
+  const a = Math.abs(v);
+  if (a >= 1e15)  return v.toExponential(2);
+  if (a >= 10000) return v.toExponential(1);
+  if (a >= 100)   return Math.round(v).toString();
+  if (Number.isInteger(v)) return v.toString();
+  return v.toFixed(1);
 }
 
 /** Zoom the current viewport in or out centered on the plot midpoint. */
