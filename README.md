@@ -66,7 +66,7 @@ python3 app.py
   - **mpmath high-precision roots** — General Diophantine `poly_y` strategy uses `mpmath.polyroots` (arbitrary precision) instead of `numpy.roots` when polynomial coefficients exceed 10⁸, finding integer solutions with very large y that float64 companion-matrix eigenvalues would miss
 - **Multi-language support (i18n)** — the entire UI, including hero section, controls, status messages, "How It Works", example cards, export file headers/section titles, and all search-parameter report lines (PDF & LaTeX), can be switched to any of **12 languages** via the language selector in the header:
   - 🌐 English, 🇳🇱 Nederlands, 🇫🇷 Français, 🇩🇪 Deutsch, 🇪🇸 Español, 🇧🇷 Português, 🇸🇦 العربية (with RTL), 🇨🇳 中文
-  - 🇹🇿 Kiswahili, 🇳🇬 Igbo, 🇳🇬 Yorùbá, 🇬🇭 Akan (Twi)
+  - 🇹🇿 Kiswahili, 🇳🇬 Igbo, 🇳🇬 Yorùbá, 🇬🇭 Akan (Twi), 🇬🇭 Ga, 🇬🇭 Ewe, 🇬🇭 Dagbani
   - Exported CSV filenames, PDF headers, LaTeX section titles, and every search-parameter line (equation, n/x/y bounds, strategy, compute time, etc.) are all translated to the selected language
   - Language choice is saved in localStorage and remembered across sessions
 - **Light / Dark mode** — toggle in the header; remembers your preference via localStorage; curve colours re-render automatically on theme change
