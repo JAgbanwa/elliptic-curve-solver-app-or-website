@@ -1406,7 +1406,7 @@ def _build_pgfplots(eq_latex: str, n_val_str: str,
         lines.append(f"  {coords}")
         lines.append(r"};")
     if sol_pts:
-        coords = " ".join(f"({p['xf']:.4f},{p['yf']:.4f})" for p in sol_pts)
+        coords = " ".join(f"({p[0]:.4f},{p[1]:.4f})" for p in sol_pts)
         lines.append(r"\addplot[red, only marks, mark=*, mark size=4pt] coordinates {")
         lines.append(f"  {coords}")
         lines.append(r"};")
@@ -1455,14 +1455,11 @@ def api_plot():  # noqa: C901
         x_plot_min, x_plot_max = -20.0, 20.0
 
     # Sanitise plot range
-    if x_plot_max - x_plot_min <= 0:
-        x_plot_min, x_plot_max = -20.0, 20.0
-    elif x_plot_max - x_plot_min > 10_000:
-        # Limit span to 1000, keeping the requested centre
-        # (the frontend already centres on solutions before calling us)
-        cx = (x_plot_min + x_plot_max) / 2
-        x_plot_min = cx - 500.0
-        x_plot_max = cx + 500.0
+    if x_plot_max - x_plot_min <= 0 or x_plot_max - x_plot_min > 10_000:
+        x_plot_min = max(-200.0, x_plot_min)
+        x_plot_max = min( 200.0, x_plot_max)
+        if x_plot_max - x_plot_min <= 0:
+            x_plot_min, x_plot_max = -20.0, 20.0
 
     N_SAMPLES = 600
     span = x_plot_max - x_plot_min
@@ -1589,29 +1586,20 @@ def api_plot():  # noqa: C901
         else:
             curve_strategy = "brute2"  # y absent from equation
 
-    # ── Solution points ─────────────────────────────────────────────────────────
-    # Keep original integer strings alongside floats so the canvas labels can
-    # display full exact values even for very large coordinates.
+    # ── Solution points ───────────────────────────────────────────────────────
     sol_pts: list = []
     for s in solutions_raw:
         try:
             yv = s.get("y", "")
             if str(yv) == "\u2014":  # em-dash means y absent (brute2 mode)
                 continue
-            xs_str = str(s.get("x", 0))
-            ys_str = str(yv)
-            sol_pts.append({
-                "xf": float(xs_str),
-                "yf": float(ys_str),
-                "xs": xs_str,
-                "ys": ys_str,
-            })
+            sol_pts.append([float(str(s.get("x", 0))), float(str(yv))])
         except Exception:  # noqa: BLE001
             pass
 
     # ── Compute y-axis bounds ─────────────────────────────────────────────────
     curve_ys: list[float] = [p[1] for seg in pos_segments + neg_segments for p in seg]
-    sol_ys:   list[float] = [sp["yf"] for sp in sol_pts]
+    sol_ys:   list[float] = [sp[1] for sp in sol_pts]
 
     if sol_ys:
         # Zoom the y axis to show solution points clearly.
@@ -1646,12 +1634,10 @@ def api_plot():  # noqa: C901
     else:
         y_lo, y_hi = -10.0, 10.0
 
-    # Clamp extreme y range so the plot remains useful, but never clip out
-    # solution points (which may legitimately have very large y coordinates).
+    # Clamp extreme y range so the plot remains useful
     if y_hi - y_lo > 20_000:
-        if not any(abs(sp["yf"]) > 2_000.0 for sp in sol_pts):
-            y_lo = max(y_lo, -2_000.0)
-            y_hi = min(y_hi,  2_000.0)
+        y_lo = max(y_lo, -2_000.0)
+        y_hi = min(y_hi,  2_000.0)
 
     pgfplots = _build_pgfplots(
         eq_latex, n_val_str,
@@ -1664,8 +1650,7 @@ def api_plot():  # noqa: C901
         "ok":             True,
         "pos_segments":   pos_segments,
         "neg_segments":   neg_segments,
-        "sol_points":     [[sp["xf"], sp["yf"]] for sp in sol_pts],
-        "sol_labels":     [{"x": sp["xs"], "y": sp["ys"]} for sp in sol_pts],
+        "sol_points":     sol_pts,
         "x_min":          x_plot_min,
         "x_max":          x_plot_max,
         "y_min":          round(y_lo, 3),
