@@ -9,17 +9,6 @@ like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.
 **[Live demo →](http://localhost:5001/#examples)**
 
 ---
-(At the moment this is how I open it works on my computer.)
-
-1. Open Terminal.app (not VS Code's built-in terminal).
-
-2. Run: cd /Users/jamalmac/elliptic-curve-solver-app-or-website
-python3 app.py
-   
-3. Open http://localhost:5001 in Safari.
-
-4. To keep it running without blocking the terminal: python3 app.py &
----
 
 ## Features
 
