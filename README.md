@@ -49,8 +49,11 @@ like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.
   - **Robust visualization** — the plot auto-zooms to fit all integer points, and never remains blank when solutions are found
 - **CSV, PDF, LaTeX & BibTeX export** — download results as a spreadsheet, print to PDF, export a ready-to-compile `.tex` file, or **copy a BibTeX `@misc` citation** to the clipboard with one click; PDF export embeds the curve plot as a PNG image; LaTeX export includes a full `pgfplots` tikzpicture; BibTeX entry includes a generated citekey, equation title, year, GitHub URL, solution count, and n-range note — button text flips to ✓ Copied! with a slide-up toast notification
 - **Large-range robustness** — searches over millions of values no longer drop with "Connection error":
-  - **SSE keepalive heartbeat** — `: keepalive` SSE comments sent every 9 s keep the HTTP pipe alive through reverse proxies and browser idle-timeout heuristics
+  - **Real SSE data heartbeats** — every 5 s the server sends a real `{"type":"heartbeat"}` SSE data frame (not a comment) so Render's and other reverse-proxy idle-timeout heuristics see genuine traffic and never kill the connection mid-search
   - **Soft 245 s timeout** — instead of gunicorn hard-killing the request at 300 s, the server cleanly sends partial results with `⏱ Time limit reached — N result(s) found. Narrow the range for a complete search.`
+  - **Chunked EC scan** — the y² = f(n, x) fixed-range scan processes x values in 2 000 000-element chunks, keeping RAM under ~50 MB per chunk regardless of total range; x ranges up to ±10⁸ are supported without memory errors
+  - **Vectorised poly_y deg-1/2** — linear and quadratic general Diophantine equations now use a fully vectorised NumPy path (direct y = −b/a or quadratic formula) over 500 000-element x-chunks; degree-3+ equations use per-x root-finding with heartbeats between chunks
+  - **Chunked brute3/brute2** — the exhaustive 3-variable and 2-variable brute-force strategies process x values in 500 000-element chunks with heartbeats so long searches never disconnect
   - **Quadratic-residue modular sieve** — for fixed x-ranges ≥ 5 000, uses moduli 8, 9, 5, 7 to eliminate ~85–95 % of candidates before any float evaluation (polynomial congruence property; only O(Σmᵢ) integer evaluations needed)
   - **Exact arithmetic fallback** — when numpy rhs > 9×10¹⁵ (float64 precision boundary), re-evaluates using Python arbitrary-precision integers + `math.isqrt`, eliminating missed solutions and int64 overflow for large y values
   - **mpmath high-precision roots** — General Diophantine `poly_y` strategy uses `mpmath.polyroots` (arbitrary precision) instead of `numpy.roots` when polynomial coefficients exceed 10⁸, finding integer solutions with very large y that float64 companion-matrix eigenvalues would miss
@@ -131,9 +134,11 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
 | Step | Detail |
 |------|--------|
 | Parse | SymPy `sympify` → `lambdify(..., modules=["numpy","math"])` |
-| Scan | Fixed/autoscale: vectorised NumPy over entire x range per n |
+| Scan | Fixed/autoscale: vectorised NumPy in **2 000 000-element chunks** — supports x ∈ [−10⁸, 10⁸] without memory errors |
+| Sieve | QR modular sieve (moduli 8, 9, 5, 7) eliminates ~85–95 % of x candidates before any float evaluation |
 | Scan | Window/exprrange/divisor: exact Python big-integer `while` loop |
-| Check | `math.isqrt(rhs)² == rhs` — exact perfect-square test |
+| Check | `math.isqrt(rhs)² == rhs` — exact perfect-square test, arbitrary precision |
+| Heartbeat | Real `{"type":"heartbeat"}` SSE frames every 5 s prevent proxy/CDN idle-timeout disconnection |
 | Invariants | Tschirnhaus substitution → short Weierstrass → Δ, j, c₄, c₆, bad primes |
 | Stream | JSON SSE events: `start → solutions → curve_info → progress → done` |
 
@@ -143,8 +148,10 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
 |------|--------|
 | Parse | `parse_general_eq` splits on `=`, forms `LHS − RHS`, validates symbols |
 | Coefficient extraction | SymPy `Poly(F, y)` gives `[c_d(n,x), …, c_0(n,x)]` |
-| Root-finding | `numpy.roots(coeffs_at_x)` → all complex roots of the y-polynomial |
-| Candidate generation | Round each real root to `⌊r⌋` and `⌈r⌉` |
+| Root-finding (deg 1) | Fully vectorised: `y = −b/a` across 500 000-element x-chunks |
+| Root-finding (deg 2) | Fully vectorised: quadratic formula across 500 000-element x-chunks |
+| Root-finding (deg 3+) | Per-x `numpy.roots()` or `mpmath.polyroots()` with heartbeats between chunks |
+| Candidate generation | Round each real root to `⌊r⌋` and `⌈r⌉`; check ±1 neighbourhood for roots > 10⁹ |
 | Exact verification | `F(n, x, y_cand) == 0` using Python arbitrary-precision integers |
 
 ---
@@ -193,6 +200,13 @@ The `/api/plot` endpoint returns a `curve_strategy` field (`ec`, `ec_no_real`, `
 | `x**2 + y**2 = n**2` | Pythagorean triples — n is the hypotenuse |
 | `x**3 + y**3 = n` | Sum-of-two-cubes; finds 1729 = 12³+1³ = 10³+9³ |
 | `y**3 - y = x**4 - 2*x - 2` | Degree-4 in x, degree-3 in y |
+
+### Hard 3-unknown elliptic curve example
+
+`y**2 = x**3 + (36*n + 27)**2 * x**2 + (15552*n**3 + 34992*n**2 + 26244*n + 6561) * x + (46656*n**4 + 139968*n**3 + 157464*n**2 + 78713*n + 14748)`
+
+Use **y² = f(n, x)** mode with fixed x range, e.g. x ∈ [−10 000 000, 10 000 000] for a single n.
+The chunked scan handles this without connection drops or memory errors.
 
 ---
 
