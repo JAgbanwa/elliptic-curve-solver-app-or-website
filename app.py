@@ -1003,8 +1003,28 @@ def api_search():
                     "solutions": solutions_found,
                 })
 
+        # ── x-range hint when fixed search found nothing ─────────────────
+        _xrh: str | None = None
+        if solutions_found == 0 and x_scale == 0 and n_raw:
+            try:
+                _n_abs = max(abs(float(n_raw[0][0])), abs(float(n_raw[-1][0])))
+                _x_abs = max(abs(x_min), abs(x_max))
+                if _n_abs > 1000 and _x_abs < _n_abs:
+                    _xsug = int(_n_abs) * 4
+                    _xrh = (
+                        f"Tip: for n \u2248 {int(_n_abs):,}, x-values of solutions "
+                        f"can scale with n (\u2248 3\u20134\u00d7|n| \u2248 {int(_n_abs) * 3:,}). "
+                        f"Try \u2460 x range \u00b1{_xsug:,}, "
+                        f"\u2461 Auto-scale mode with k\u2009=\u20094, or "
+                        f"\u2462 Smart Window with center\u2009=\u2009-3*n "
+                        f"and half-width\u2009{max(10000, int(_n_abs) // 10):,}."
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
         yield sse({"type": "done", "total_solutions": solutions_found,
-                   "n_with_solutions": n_with_solutions})
+                   "n_with_solutions": n_with_solutions,
+                   **({"x_range_hint": _xrh} if _xrh else {})})
 
     return Response(
         stream_with_context(generate()),

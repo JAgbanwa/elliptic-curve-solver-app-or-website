@@ -56,10 +56,11 @@ const EXAMPLES = [
     desc: "Node cubic family; integer points vary richly with n.",
   },
   {
-    name: "General Weierstrass (36n+27)² family",
+    name: "y\u00b2=(36n+27)\u00b2 family \u2014 large-n known solution",
     expr: "x**3 + (36*n + 27)**2 * x**2 + (15552*n**3 + 34992*n**2 + 26244*n + 6561)*x + (46656*n**4 + 139968*n**3 + 157464*n**2 + 78713*n + 14748)",
-    nm: 1, nx: 10, xm: -50000, xx: 50000, nd: 1,
-    desc: "y\u00b2 = x\u00b3 + (36n+27)\u00b2x\u00b2 + \u2026 General Weierstrass form with x\u00b2 term. Large x range needed for small n.",
+    nm: 147498, nx: 147498, nd: 1,
+    xMode: "autoscale", xScale: 3.5,
+    desc: "y\u00b2 = x\u00b3 + (36n+27)\u00b2x\u00b2 + \u2026 For large n the solution x\u2009\u2248\u2009\u22123n lies far outside the default \u00b11000 range. Auto-scale mode (k=3.5) sets x\u2009\u2208\u2009[\u22123.5n, 3.5n] per n and finds the known solution (n=147498, x=\u2212449511, y=\u00b12312387148693).",
   },
   {
     name: "Weierstrass (large-coeff family)",
@@ -168,7 +169,8 @@ const statusArea   = document.getElementById("status-area");
 const tableWrap    = document.getElementById("table-wrap");
 const resultsBody  = document.getElementById("results-tbody");
 const solCount     = document.getElementById("solution-count");
-const emptyState   = document.getElementById("empty-state");
+const emptyState      = document.getElementById("empty-state");
+const xRangeHintMsg  = document.getElementById("x-range-hint-msg");
 const exampleGrid    = document.getElementById("example-grid");
 const xModeSelect    = document.getElementById("x-mode-select");
 const xFixedRange    = document.getElementById("x-fixed-range");
@@ -428,6 +430,7 @@ function clearResults() {
   viewport = null;
   const ps = document.getElementById("plot-section");
   if (ps) ps.style.display = "none";
+  if (xRangeHintMsg) xRangeHintMsg.style.display = "none";
 }
 
 function addRows(batch) {
@@ -704,6 +707,14 @@ function startSearch() {
           emptyState.style.display  = "block";
           tableWrap.style.display  = "none";
           setStatus((typeof t === "function") ? t("status-no-results") : "Search complete — no integer points found.", "status-done");
+          if (xRangeHintMsg) {
+            if (msg.x_range_hint) {
+              xRangeHintMsg.textContent = msg.x_range_hint;
+              xRangeHintMsg.style.display = "block";
+            } else {
+              xRangeHintMsg.style.display = "none";
+            }
+          }
         } else {
           const _sp3 = (typeof t === "function") ? (allSolutions.length !== 1 ? t("sol-plural") : t("sol-singular")) : (allSolutions.length !== 1 ? "solutions" : "solution");
           setStatus(
