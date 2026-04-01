@@ -43,6 +43,8 @@ n_sym, x_sym, y_sym = symbols("n x y")
 _SSE_KEEPALIVE     = 'data: {"type":"heartbeat"}\n\n'
 _KEEPALIVE_SEC     = 5      # seconds between heartbeat pings (must be real data frames, not comments, for Render proxy)
 _SOFT_TIMEOUT      = 245    # graceful shutdown before gunicorn's 300 s hard limit
+_EC_CHUNK          = 2_000_000   # max x values per vectorised chunk (keeps RAM under ~50 MB/chunk)
+_POLY_CHUNK        = 500_000     # x-chunk size for general Diophantine vectorised paths
 
 # ── Large-value exact-arithmetic threshold ─────────────────────────────────────
 # numpy float64 has 53-bit mantissa: values > 9×10^15 lose integer precision.
@@ -863,8 +865,10 @@ def api_search():
 
         n_with_solutions: list[str] = []
 
-        # Pre-allocate fixed x arrays when not auto-scaling
-        if x_scale == 0:
+        # Pre-allocate fixed x arrays when not auto-scaling AND range fits in one chunk
+        _x_range_total = (x_max - x_min + 1) if x_scale == 0 else 0
+        _use_ec_chunks = (x_scale == 0 and _x_range_total > _EC_CHUNK)
+        if x_scale == 0 and not _use_ec_chunks:
             x_arr = np.arange(x_min, x_max + 1, dtype=np.float64)
             x_int = np.arange(x_min, x_max + 1, dtype=np.int64)
 
@@ -902,27 +906,28 @@ def api_search():
                 x_arr = np.arange(-half, half + 1, dtype=np.float64)
                 x_int = np.arange(-half, half + 1, dtype=np.int64)
 
-            # ── QR modular sieve: eliminates ~85-95 % of non-residue x values ─
-            # Only for integer n (rational fractions don't commute cleanly with mod)
             _n_exact = n_raw[idx][0]
-            if (f_py_exact is not None
-                    and len(x_int) >= _SIEVE_MIN_X
-                    and isinstance(_n_exact, int)):
-                _sv = _compute_qr_sieve(f_py_exact, _n_exact, x_int)
-                x_arr_eval = x_arr[_sv]
-                x_int_eval = x_int[_sv]
-            else:
-                x_arr_eval = x_arr
-                x_int_eval = x_int
 
-            try:
-                rhs_raw = f_fast(n_float, x_arr_eval)
-                rhs_arr = np.asarray(rhs_raw, dtype=np.float64)
-                if rhs_arr.ndim == 0:          # expression independent of x
-                    rhs_arr = np.full(len(x_arr_eval), float(rhs_arr))
-            except Exception:  # noqa: BLE001
-                pass
-            else:
+            def _process_ec_chunk(x_int_c: np.ndarray, x_arr_c: np.ndarray) -> list:  # noqa: ANN202
+                """Evaluate one chunk of x values, return solution dicts."""
+                chunk_batch: list[dict] = []
+                # QR modular sieve
+                if (f_py_exact is not None
+                        and len(x_int_c) >= _SIEVE_MIN_X
+                        and isinstance(_n_exact, int)):
+                    _sv = _compute_qr_sieve(f_py_exact, _n_exact, x_int_c)
+                    x_arr_eval = x_arr_c[_sv]
+                    x_int_eval = x_int_c[_sv]
+                else:
+                    x_arr_eval = x_arr_c
+                    x_int_eval = x_int_c
+                try:
+                    rhs_raw = f_fast(n_float, x_arr_eval)
+                    rhs_arr = np.asarray(rhs_raw, dtype=np.float64)
+                    if rhs_arr.ndim == 0:
+                        rhs_arr = np.full(len(x_arr_eval), float(rhs_arr))
+                except Exception:  # noqa: BLE001
+                    return chunk_batch
                 rhs_round = np.rint(rhs_arr)
                 mask = (
                     np.isfinite(rhs_arr)
@@ -932,15 +937,11 @@ def api_search():
                 if np.any(mask):
                     cand_rhs_np = rhs_round[mask]
                     cand_x      = x_int_eval[mask]
-                    # Use exact Python big-integer arithmetic for the final check.
-                    # numpy int64 overflows for y > ~3×10⁹; float64 sqrt loses
-                    # precision for rhs > 9×10¹⁵.  math.isqrt handles any size.
                     for j in range(len(cand_x)):
                         x_val = int(cand_x[j])
                         if skip_zero_x and x_val == 0:
                             continue
                         rhs_approx = int(cand_rhs_np[j])
-                        # Re-evaluate exactly when float64 may have lost precision
                         if rhs_approx > _EXACT_THRESH and f_py_exact is not None:
                             try:
                                 rhs_exact = int(f_py_exact(_n_exact, x_val))
@@ -950,12 +951,39 @@ def api_search():
                             rhs_exact = rhs_approx
                         if rhs_exact < 0:
                             continue
-                        y_pos = math.isqrt(rhs_exact)   # exact, arbitrary precision
+                        y_pos = math.isqrt(rhs_exact)
                         if y_pos * y_pos == rhs_exact:
-                            batch.append({"n": n_disp, "x": x_val, "y":  y_pos})
+                            chunk_batch.append({"n": n_disp, "x": x_val, "y":  y_pos})
                             if y_pos > 0:
-                                batch.append({"n": n_disp, "x": x_val, "y": -y_pos})
-                            solutions_found += 1
+                                chunk_batch.append({"n": n_disp, "x": x_val, "y": -y_pos})
+                return chunk_batch
+
+            if _use_ec_chunks:
+                # Chunked scan: process x range in _EC_CHUNK blocks to stay within RAM
+                for _cs in range(x_min, x_max + 1, _EC_CHUNK):
+                    _ce = min(_cs + _EC_CHUNK, x_max + 1)
+                    _xi = np.arange(_cs, _ce, dtype=np.int64)
+                    _xa = _xi.astype(np.float64)
+                    _cb = _process_ec_chunk(_xi, _xa)
+                    batch.extend(_cb)
+                    solutions_found += sum(1 for d in _cb if d["y"] >= 0)
+                    # heartbeat + soft-timeout check between chunks
+                    _now = time.monotonic()
+                    if _now - last_hb >= _KEEPALIVE_SEC:
+                        yield _SSE_KEEPALIVE
+                        last_hb = _now
+                    if _now - t_start >= _SOFT_TIMEOUT:
+                        if batch:
+                            n_with_solutions.append(n_disp)
+                            yield sse({"type": "solutions", "data": batch})
+                        yield sse({"type": "done", "total_solutions": solutions_found,
+                                   "n_with_solutions": n_with_solutions,
+                                   "timed_out": True, "timed_out_at_n": n_disp})
+                        return
+            else:
+                _cb = _process_ec_chunk(x_int, x_arr)
+                batch.extend(_cb)
+                solutions_found += sum(1 for d in _cb if d["y"] >= 0)
 
             if batch:
                 n_with_solutions.append(n_disp)
@@ -1151,71 +1179,139 @@ def api_diophantine():  # noqa: C901
                 seen_xy: set      = set()
                 n_float = float(n_raw_val)
 
-                for x_val in range(x_min, x_max + 1):
-                    if skip_zero_x and x_val == 0:
-                        continue
-                    x_float = float(x_val)
+                # ── Vectorised chunked path for large x ranges ─────────────────
+                # Degree 1/2: fully vectorised (quadratic formula / direct division)
+                # Degree 3+:  per-x root-finding but chunked with heartbeats
+                _poly_deg = len(coeff_fns_flt) - 1
 
+                def _verify_xy(x_v: int, y_v: int) -> bool:
+                    key = (x_v, y_v)
+                    if key in seen_xy:
+                        return False
                     try:
-                        flt_c: list[float] = []
-                        for cf in coeff_fns_flt:
-                            v = cf(n_float, x_float)
-                            flt_c.append(
-                                float(v) if np.isscalar(v)
-                                else float(np.asarray(v).flat[0])
-                            )
-                        while len(flt_c) > 1 and flt_c[0] == 0.0:
-                            flt_c.pop(0)
-                        if len(flt_c) < 2:
-                            continue
-
-                        # For large coefficients numpy.roots() (float64 companion-
-                        # matrix eigenvalues) loses precision.  Switch to mpmath
-                        # arbitrary-precision polynomial root-finding, which remains
-                        # accurate when coefficients differ by > 10^8 − enabling
-                        # detection of integer solutions with very large y values.
-                        _max_c = max(abs(c) for c in flt_c if c != 0.0)
-                        if _MPMATH and _max_c > 1e8:
-                            try:
-                                _mp_c = [_mpmath.mpf(c) for c in flt_c]
-                                _mp_roots = _mpmath.polyroots(_mp_c,
-                                                              maxsteps=200,
-                                                              extraprec=40)
-                                approx_roots = [complex(r) for r in _mp_roots]
-                            except Exception:  # noqa: BLE001
-                                approx_roots = list(np.roots(flt_c))
-                        else:
-                            approx_roots = list(np.roots(flt_c))
-
-                        y_cands: set[int] = set()
-                        for r in approx_roots:
-                            if abs(r.imag) < 0.5:
-                                yr = r.real
-                                y_cands.add(math.floor(yr))
-                                y_cands.add(math.ceil(yr))
-                                # For very large roots, also check ±1 neighbourhood
-                                # in case mpmath precision still leaves a small gap
-                                if abs(yr) > 1e9:
-                                    y_cands.add(math.floor(yr) - 1)
-                                    y_cands.add(math.ceil(yr) + 1)
+                        val = f_exact(n_raw_val, x_v, y_v)
+                        ok  = (abs(val) < 0.5) if isinstance(val, float) else (val == 0)
                     except Exception:  # noqa: BLE001
-                        continue
+                        ok = False
+                    if ok:
+                        seen_xy.add(key)
+                    return ok
 
-                    for y_cand in y_cands:
-                        key = (x_val, y_cand)
-                        if key in seen_xy:
+                for _xs in range(x_min, x_max + 1, _POLY_CHUNK):
+                    _xe = min(_xs + _POLY_CHUNK, x_max + 1)
+                    x_chunk_int = np.arange(_xs, _xe, dtype=np.int64)
+                    if skip_zero_x:
+                        x_chunk_int = x_chunk_int[x_chunk_int != 0]
+                    if len(x_chunk_int) == 0:
+                        continue
+                    x_chunk_flt = x_chunk_int.astype(np.float64)
+
+                    # Compute all polynomial coefficients as numpy arrays over chunk
+                    try:
+                        coeff_arrs: list[np.ndarray] = []
+                        for cf in coeff_fns_flt:
+                            cv = np.asarray(cf(n_float, x_chunk_flt), dtype=np.float64)
+                            if cv.ndim == 0:
+                                cv = np.full(len(x_chunk_flt), float(cv))
+                            coeff_arrs.append(cv)
+                        # Drop leading zero coefficients (all-zero across chunk is rare but safe)
+                        while len(coeff_arrs) > 1 and np.all(coeff_arrs[0] == 0):
+                            coeff_arrs.pop(0)
+                        eff_deg = len(coeff_arrs) - 1
+                        if eff_deg < 1:
                             continue
-                        try:
-                            val = f_exact(n_raw_val, x_val, y_cand)
-                            ok  = (abs(val) < 0.5) if isinstance(val, float) \
-                                  else (val == 0)
-                            if ok:
-                                seen_xy.add(key)
-                                batch.append({"n": n_disp, "x": str(x_val),
-                                              "y": str(y_cand)})
+                    except Exception:  # noqa: BLE001
+                        # Vectorised eval failed — fall back to per-x scalar loop for this chunk
+                        coeff_arrs = None
+                        eff_deg = _poly_deg
+
+                    if coeff_arrs is not None and eff_deg == 1:
+                        # Degree 1 in y: a·y + b = 0  →  y = −b/a  (vectorised)
+                        a_arr, b_arr = coeff_arrs[0], coeff_arrs[1]
+                        valid = np.abs(a_arr) > 1e-10
+                        y_exact = np.where(valid, -b_arr / a_arr, np.nan)
+                        y_round = np.rint(y_exact)
+                        cand_mask = valid & np.isfinite(y_exact) & (np.abs(y_exact - y_round) < 1e-6)
+                        for k in np.where(cand_mask)[0]:
+                            x_v = int(x_chunk_int[k])
+                            y_v = int(y_round[k])
+                            if _verify_xy(x_v, y_v):
+                                batch.append({"n": n_disp, "x": str(x_v), "y": str(y_v)})
                                 solutions_found += 1
-                        except Exception:  # noqa: BLE001
-                            pass
+
+                    elif coeff_arrs is not None and eff_deg == 2:
+                        # Degree 2 in y: quadratic formula  (vectorised)
+                        a_arr, b_arr, c_arr = coeff_arrs[0], coeff_arrs[1], coeff_arrs[2]
+                        disc = b_arr * b_arr - 4.0 * a_arr * c_arr
+                        valid = (np.abs(a_arr) > 1e-10) & (disc >= -1e-10)
+                        sqrt_d = np.where(valid, np.sqrt(np.maximum(disc, 0)), 0.0)
+                        for sign in (1.0, -1.0):
+                            y_cand = np.where(valid, (-b_arr + sign * sqrt_d) / (2.0 * a_arr), np.nan)
+                            y_r    = np.rint(y_cand)
+                            cm     = valid & np.isfinite(y_cand) & (np.abs(y_cand - y_r) < 1e-6)
+                            for k in np.where(cm)[0]:
+                                x_v = int(x_chunk_int[k])
+                                y_v = int(y_r[k])
+                                if _verify_xy(x_v, y_v):
+                                    batch.append({"n": n_disp, "x": str(x_v), "y": str(y_v)})
+                                    solutions_found += 1
+
+                    else:
+                        # Degree 3+ (or vectorised coeff eval failed): per-x root finding
+                        for ki, x_val in enumerate(x_chunk_int.tolist()):
+                            x_float = float(x_val)
+                            try:
+                                if coeff_arrs is not None:
+                                    flt_c = [float(coeff_arrs[d][ki]) for d in range(len(coeff_arrs))]
+                                else:
+                                    flt_c = []
+                                    for cf in coeff_fns_flt:
+                                        v = cf(n_float, x_float)
+                                        flt_c.append(float(v) if np.isscalar(v)
+                                                     else float(np.asarray(v).flat[0]))
+                                while len(flt_c) > 1 and flt_c[0] == 0.0:
+                                    flt_c.pop(0)
+                                if len(flt_c) < 2:
+                                    continue
+                                _max_c = max(abs(c) for c in flt_c if c != 0.0)
+                                if _MPMATH and _max_c > 1e8:
+                                    try:
+                                        _mp_c    = [_mpmath.mpf(c) for c in flt_c]
+                                        _mp_roots = _mpmath.polyroots(_mp_c, maxsteps=200, extraprec=40)
+                                        approx_roots = [complex(r) for r in _mp_roots]
+                                    except Exception:  # noqa: BLE001
+                                        approx_roots = list(np.roots(flt_c))
+                                else:
+                                    approx_roots = list(np.roots(flt_c))
+                                y_cands: set[int] = set()
+                                for r in approx_roots:
+                                    if abs(r.imag) < 0.5:
+                                        yr = r.real
+                                        y_cands.add(math.floor(yr))
+                                        y_cands.add(math.ceil(yr))
+                                        if abs(yr) > 1e9:
+                                            y_cands.add(math.floor(yr) - 1)
+                                            y_cands.add(math.ceil(yr) + 1)
+                            except Exception:  # noqa: BLE001
+                                continue
+                            for y_cand in y_cands:
+                                if _verify_xy(x_val, y_cand):
+                                    batch.append({"n": n_disp, "x": str(x_val), "y": str(y_cand)})
+                                    solutions_found += 1
+
+                    # Heartbeat + timeout between x-chunks
+                    _now = time.monotonic()
+                    if _now - last_hb >= _KEEPALIVE_SEC:
+                        yield _SSE_KEEPALIVE
+                        last_hb = _now
+                    if _now - t_start >= _SOFT_TIMEOUT:
+                        if batch:
+                            n_with_solutions.append(n_disp)
+                            yield sse({"type": "solutions", "data": batch})
+                        yield sse({"type": "done", "total_solutions": solutions_found,
+                                   "n_with_solutions": n_with_solutions,
+                                   "timed_out": True, "timed_out_at_n": n_disp})
+                        return
 
                 if batch:
                     n_with_solutions.append(n_disp)
@@ -1250,53 +1346,69 @@ def api_diophantine():  # noqa: C901
                 seen_set: set     = set()
                 n_float = float(n_raw_val)
 
-                for x_val in range(x_min, x_max + 1):
-                    if skip_zero_x and x_val == 0:
-                        continue
-                    x_float = float(x_val)
-
-                    # Vectorised scan over the entire y range at once
-                    try:
-                        raw = f_vec(n_float, x_float, y_arr_flt)
-                        vals = np.asarray(raw, dtype=float).ravel()
-                        if vals.size == 1:   # scalar broadcast
-                            vals = np.full(len(y_arr_int), vals[0])
-                        y_cands_list = y_arr_int[
-                            np.isfinite(vals) & (np.abs(vals) < 1.0)
-                        ].tolist()
-                    except Exception:  # noqa: BLE001
-                        y_cands_list = []
-                        for y_vi, y_fi in zip(y_arr_int.tolist(),
-                                              y_arr_flt.tolist()):
-                            try:
-                                v = float(f_vec(n_float, x_float, y_fi))
-                                if math.isfinite(v) and abs(v) < 1.0:
-                                    y_cands_list.append(y_vi)
-                            except Exception:  # noqa: BLE001
-                                pass
-
-                    for y_cand in y_cands_list:
-                        y_cand = int(y_cand)
-                        key = (x_val, y_cand)
-                        if key in seen_set:
+                for _bx_s in range(x_min, x_max + 1, _POLY_CHUNK):
+                    _bx_e = min(_bx_s + _POLY_CHUNK, x_max + 1)
+                    for x_val in range(_bx_s, _bx_e):
+                        if skip_zero_x and x_val == 0:
                             continue
-                        ok = False
+                        x_float = float(x_val)
+
+                        # Vectorised scan over the entire y range at once
                         try:
-                            val = f_exact(n_raw_val, x_val, y_cand)
-                            ok  = (abs(val) < 0.5) if isinstance(val, float) \
-                                  else (val == 0)
+                            raw = f_vec(n_float, x_float, y_arr_flt)
+                            vals = np.asarray(raw, dtype=float).ravel()
+                            if vals.size == 1:   # scalar broadcast
+                                vals = np.full(len(y_arr_int), vals[0])
+                            y_cands_list = y_arr_int[
+                                np.isfinite(vals) & (np.abs(vals) < 1.0)
+                            ].tolist()
                         except Exception:  # noqa: BLE001
-                            # exact check failed; use tight float threshold
+                            y_cands_list = []
+                            for y_vi, y_fi in zip(y_arr_int.tolist(),
+                                                  y_arr_flt.tolist()):
+                                try:
+                                    v = float(f_vec(n_float, x_float, y_fi))
+                                    if math.isfinite(v) and abs(v) < 1.0:
+                                        y_cands_list.append(y_vi)
+                                except Exception:  # noqa: BLE001
+                                    pass
+
+                        for y_cand in y_cands_list:
+                            y_cand = int(y_cand)
+                            key = (x_val, y_cand)
+                            if key in seen_set:
+                                continue
+                            ok = False
                             try:
-                                fv = float(f_vec(n_float, x_float, float(y_cand)))
-                                ok = math.isfinite(fv) and abs(fv) < 0.5
+                                val = f_exact(n_raw_val, x_val, y_cand)
+                                ok  = (abs(val) < 0.5) if isinstance(val, float) \
+                                      else (val == 0)
                             except Exception:  # noqa: BLE001
-                                pass
-                        if ok:
-                            seen_set.add(key)
-                            batch.append({"n": n_disp, "x": str(x_val),
-                                          "y": str(y_cand)})
-                            solutions_found += 1
+                                # exact check failed; use tight float threshold
+                                try:
+                                    fv = float(f_vec(n_float, x_float, float(y_cand)))
+                                    ok = math.isfinite(fv) and abs(fv) < 0.5
+                                except Exception:  # noqa: BLE001
+                                    pass
+                            if ok:
+                                seen_set.add(key)
+                                batch.append({"n": n_disp, "x": str(x_val),
+                                              "y": str(y_cand)})
+                                solutions_found += 1
+
+                    # Heartbeat + timeout between x-chunks
+                    _now = time.monotonic()
+                    if _now - last_hb >= _KEEPALIVE_SEC:
+                        yield _SSE_KEEPALIVE
+                        last_hb = _now
+                    if _now - t_start >= _SOFT_TIMEOUT:
+                        if batch:
+                            n_with_solutions.append(n_disp)
+                            yield sse({"type": "solutions", "data": batch})
+                        yield sse({"type": "done", "total_solutions": solutions_found,
+                                   "n_with_solutions": n_with_solutions,
+                                   "timed_out": True, "timed_out_at_n": n_disp})
+                        return
 
                 if batch:
                     n_with_solutions.append(n_disp)
@@ -1327,24 +1439,40 @@ def api_diophantine():  # noqa: C901
                 batch: list[dict] = []
                 n_float = float(n_raw_val)
 
-                for x_val in range(x_min, x_max + 1):
-                    if skip_zero_x and x_val == 0:
-                        continue
-                    ok = False
-                    try:
-                        val = f_exact(n_raw_val, x_val)
-                        ok  = (abs(val) < 0.5) if isinstance(val, float) \
-                              else (val == 0)
-                    except Exception:  # noqa: BLE001
+                for _bx_s in range(x_min, x_max + 1, _POLY_CHUNK):
+                    _bx_e = min(_bx_s + _POLY_CHUNK, x_max + 1)
+                    for x_val in range(_bx_s, _bx_e):
+                        if skip_zero_x and x_val == 0:
+                            continue
+                        ok = False
                         try:
-                            fv = float(f_vec(n_float, float(x_val)))
-                            ok = math.isfinite(fv) and abs(fv) < 0.5
+                            val = f_exact(n_raw_val, x_val)
+                            ok  = (abs(val) < 0.5) if isinstance(val, float) \
+                                  else (val == 0)
                         except Exception:  # noqa: BLE001
-                            pass
-                    if ok:
-                        batch.append({"n": n_disp, "x": str(x_val),
-                                      "y": "\u2014"})
-                        solutions_found += 1
+                            try:
+                                fv = float(f_vec(n_float, float(x_val)))
+                                ok = math.isfinite(fv) and abs(fv) < 0.5
+                            except Exception:  # noqa: BLE001
+                                pass
+                        if ok:
+                            batch.append({"n": n_disp, "x": str(x_val),
+                                          "y": "\u2014"})
+                            solutions_found += 1
+
+                    # Heartbeat + timeout between x-chunks
+                    _now = time.monotonic()
+                    if _now - last_hb >= _KEEPALIVE_SEC:
+                        yield _SSE_KEEPALIVE
+                        last_hb = _now
+                    if _now - t_start >= _SOFT_TIMEOUT:
+                        if batch:
+                            n_with_solutions.append(n_disp)
+                            yield sse({"type": "solutions", "data": batch})
+                        yield sse({"type": "done", "total_solutions": solutions_found,
+                                   "n_with_solutions": n_with_solutions,
+                                   "timed_out": True, "timed_out_at_n": n_disp})
+                        return
 
                 if batch:
                     n_with_solutions.append(n_disp)
