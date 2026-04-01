@@ -551,6 +551,8 @@ function startSearch() {
     catch { return; }
 
     switch (msg.type) {
+      case "heartbeat": return;  // keepalive ping — ignore silently
+
       case "warning": {
         const wb = document.getElementById("search-warning");
         if (wb) { wb.textContent = "\u26a0 " + msg.message; wb.style.display = "block"; }

@@ -40,8 +40,8 @@ n_sym, x_sym, y_sym = symbols("n x y")
 # Browsers and reverse proxies drop idle SSE connections.  Yielding an SSE
 # comment (": …\n\n") every _KEEPALIVE_SEC keeps the pipe alive without
 # affecting the browser's event-listener logic.
-_SSE_KEEPALIVE     = ": keepalive\n\n"
-_KEEPALIVE_SEC     = 9      # seconds between heartbeat pings
+_SSE_KEEPALIVE     = 'data: {"type":"heartbeat"}\n\n'
+_KEEPALIVE_SEC     = 5      # seconds between heartbeat pings (must be real data frames, not comments, for Render proxy)
 _SOFT_TIMEOUT      = 245    # graceful shutdown before gunicorn's 300 s hard limit
 
 # ── Large-value exact-arithmetic threshold ─────────────────────────────────────
