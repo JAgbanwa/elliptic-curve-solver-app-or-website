@@ -6,7 +6,7 @@ A Flask web app for finding integer solutions to polynomial Diophantine equation
 Supports the classical **y² = f(n, x)** elliptic-curve family mode **and** a
 fully general **F(x, y, n) = 0** mode for arbitrary polynomial equations
 like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.  
-**[Live demo →](http://localhost:5001/#examples)**
+**[Live demo →](https://elliptic-curve-solver-app-or-website.onrender.com/#examples)**
 
 ---
 
@@ -44,6 +44,9 @@ like `y³ − y = x⁴ − 2x − 2`. Results stream live to the browser.
   - **General polynomial in y** — all real root-branches traced via `numpy.roots()`
   - **Non-polynomial y** (e.g. `x^y = n`) — integer points plotted as a scatter with a note explaining the curve shape is unavailable
   - Caption identifies the strategy (`ec`, `poly_y`, `brute3`, …) so you always know what was drawn and why
+  - **Always plots all found integer solutions** — for any equation, all integer points are shown as red dots, regardless of range or equation type
+  - **Debug overlay & panel** — a debug panel below the plot shows the data sent to and received from the backend, helping diagnose plotting issues and ensuring transparency
+  - **Robust visualization** — the plot auto-zooms to fit all integer points, and never remains blank when solutions are found
 - **CSV, PDF, LaTeX & BibTeX export** — download results as a spreadsheet, print to PDF, export a ready-to-compile `.tex` file, or **copy a BibTeX `@misc` citation** to the clipboard with one click; PDF export embeds the curve plot as a PNG image; LaTeX export includes a full `pgfplots` tikzpicture; BibTeX entry includes a generated citekey, equation title, year, GitHub URL, solution count, and n-range note — button text flips to ✓ Copied! with a slide-up toast notification
 - **Large-range robustness** — searches over millions of values no longer drop with "Connection error":
   - **SSE keepalive heartbeat** — `: keepalive` SSE comments sent every 9 s keep the HTTP pipe alive through reverse proxies and browser idle-timeout heuristics
@@ -91,6 +94,16 @@ The repo ships `Procfile` and `render.yaml` for one-click deployment:
 
 > The free tier spins down after 15 min of inactivity (cold-start ~30 s).  
 > Upgrade to Starter ($7/month) for always-on.
+
+### Troubleshooting deployment
+
+If your local app shows the latest features (e.g., robust plotting, debug panel) but the live Render site does not, make sure to:
+
+1. Commit and push all your changes to the `main` branch on GitHub.
+2. Trigger a redeploy on Render (it should auto-deploy on push, or you can redeploy manually from the Render dashboard).
+3. Clear your browser cache or do a hard refresh (Shift+Reload) to ensure you see the latest frontend code.
+
+If issues persist, check the Render build logs for errors or failed deployments.
 
 ---
 
