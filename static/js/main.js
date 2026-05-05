@@ -2440,7 +2440,7 @@ function renderHistoryPanel() {
     card.dataset.id = entry.id;
     card.innerHTML  = `
       <div class="history-entry-meta">
-        <span class="history-entry-time">${_formatRelTime(entry.timestamp)}</span>
+        <span class="history-entry-time">${entry.pinned ? "📌 " : ""}${_formatRelTime(entry.timestamp)}</span>
         <span class="history-entry-sols">${entry.solutionCount} ${solWord}</span>
       </div>
       <div class="history-entry-expr">${escHtml(p.equation || "—")}</div>
@@ -2681,18 +2681,26 @@ function shareSearchURL() {
   const btn = document.getElementById("btn-save-search");
   if (!btn) return;
   btn.addEventListener("click", () => {
-    const params = _collectSearchParams();
+    if (!searchMeta || !searchMeta.equation) {
+      _showCopyToast("⚠ Run a search first, then pin it.");
+      return;
+    }
     const entry = {
-      expr:    params.expr || params.eq || "",
-      nm: params.nm, nx: params.nx, nd: params.nd,
-      xm: params.xm, xx: params.xx,
-      count:   allSolutions ? allSolutions.length : 0,
-      ts:      Date.now(),
-      pinned:  true,
+      id:            Date.now(),
+      timestamp:     new Date().toISOString(),
+      params:        Object.assign({}, searchMeta),
+      results:       allSolutions.slice(0, 500),
+      solutionCount: allSolutions.length,
+      computeMs:     searchMeta.finishedAt
+                       ? searchMeta.finishedAt - searchMeta.startedAt
+                       : 0,
+      pinned:        true,
     };
-    // Prepend and deduplicate by expr+nm+nx, keeping most recent
+    // Remove any existing entry with the same equation + n-range, then prepend
     const hist = _getHistory().filter(
-      h => !(h.expr === entry.expr && h.nm === entry.nm && h.nx === entry.nx)
+      h => !(h.params && h.params.equation === entry.params.equation
+             && h.params.nMin === entry.params.nMin
+             && h.params.nMax === entry.params.nMax)
     );
     hist.unshift(entry);
     _setHistory(hist.slice(0, MAX_HISTORY));
