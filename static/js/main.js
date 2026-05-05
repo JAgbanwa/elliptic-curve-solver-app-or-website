@@ -272,6 +272,83 @@ let plotSolsForN       = [];    // solutions sent to last /api/plot, for client-
 // Search metadata — captured at search start, used by PDF/LaTeX export
 let searchMeta = {};      // snapshot of search parameters
 /* ═══════════════════════════════════════════════════════════════════════════
+   PREMIUM MICRO-INTERACTIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// ── Button ripple ──────────────────────────────────────────────────────────
+document.addEventListener("pointerdown", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const r = btn.getBoundingClientRect();
+  const size = Math.max(r.width, r.height) * 2;
+  const span = document.createElement("span");
+  span.className = "ripple";
+  span.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size/2}px;top:${e.clientY - r.top - size/2}px`;
+  btn.appendChild(span);
+  span.addEventListener("animationend", () => span.remove(), { once: true });
+}, { passive: true });
+
+// ── Animated counter for solution badge ───────────────────────────────────
+function _animateCount(el, fromVal, toVal, suffix) {
+  const duration = 500, start = performance.now();
+  const step = now => {
+    const p = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    const val = Math.round(fromVal + (toVal - fromVal) * ease);
+    el.textContent = val + " " + suffix;
+    if (p < 1) requestAnimationFrame(step);
+    else {
+      el.textContent = toVal + " " + suffix;
+      el.classList.remove("pop");
+      void el.offsetWidth;
+      el.classList.add("pop");
+    }
+  };
+  requestAnimationFrame(step);
+}
+
+// ── Confetti burst ─────────────────────────────────────────────────────────
+function burstConfetti() {
+  const cv = document.createElement("canvas");
+  cv.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:8000;";
+  document.body.appendChild(cv);
+  const ctx = cv.getContext("2d");
+  const W = cv.width = window.innerWidth;
+  const H = cv.height = window.innerHeight;
+  const COLORS = ["#a371f7","#58a6ff","#3fb950","#f0883e","#ff7b72","#ffa657","#79c0ff"];
+  const pieces = Array.from({ length: 110 }, () => ({
+    x:  W * 0.2 + Math.random() * W * 0.6,
+    y: -10 - Math.random() * 60,
+    vx: (Math.random() - 0.5) * 5,
+    vy: 2.5 + Math.random() * 4,
+    rot: Math.random() * Math.PI * 2,
+    drot: (Math.random() - 0.5) * 0.22,
+    w: 7 + Math.random() * 9,
+    h: 4 + Math.random() * 6,
+    color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    life: 1,
+    decay: 0.010 + Math.random() * 0.008,
+  }));
+  let done = false;
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    pieces.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.rot += p.drot; p.life -= p.decay;
+      if (p.life <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+      ctx.restore();
+    });
+    if (!done) requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+  setTimeout(() => { done = true; cv.remove(); }, 3200);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    LATEX PREVIEW
    ═══════════════════════════════════════════════════════════════════════════ */
 let previewTimer = null;
@@ -470,6 +547,7 @@ function addRows(batch) {
     } catch (_) { hBits = ""; }
 
     const tr = document.createElement("tr");
+    tr.className = "new-row";
     tr.innerHTML = `
       <td>${rowIndex}</td>
       <td>${escHtml(String(n))}</td>
@@ -725,7 +803,9 @@ function startSearch() {
         progressFill.style.width = msg.pct + "%";
         progressStats.textContent =
           `Progress: ${msg.pct}%  |  n = ${msg.n}  |  solutions found: ${msg.solutions}`;
-        solCount.textContent = `${msg.solutions} solution${msg.solutions !== 1 ? "s" : ""}`;
+        { const _prev = parseInt(solCount.textContent) || 0;
+          const _suf  = msg.solutions !== 1 ? "solutions" : "solution";
+          if (msg.solutions !== _prev) _animateCount(solCount, _prev, msg.solutions, _suf); }
         break;
 
       case "solutions":
@@ -734,7 +814,8 @@ function startSearch() {
         addRows(msg.data);
         _ssFnd = allSolutions.length;   // keep running total for onerror
         const _sp2 = (typeof t === "function") ? (allSolutions.length !== 1 ? t("sol-plural") : t("sol-singular")) : (allSolutions.length !== 1 ? "solutions" : "solution");
-        solCount.textContent = `${allSolutions.length} ${_sp2}`;
+        { const _prev2 = parseInt(solCount.textContent) || 0;
+          _animateCount(solCount, _prev2, allSolutions.length, _sp2); }
         break;
 
       case "curve_info": {
@@ -948,6 +1029,8 @@ function startSearch() {
             `${(typeof t === "function") ? t("done-found") || "Done! Found" : "Done! Found"} ${allSolutions.length} ${_sp3}.`,
             "status-done",
           );
+          // 🎉 Confetti burst for found solutions
+          burstConfetti();
         }
         if (!msg.timed_out) {
           const _ts = msg.total_solutions;
@@ -1785,6 +1868,7 @@ btnExport.addEventListener("click", () => {
   a.download = (typeof t === "function") ? t("export-filename-csv") : "diophantine_solutions.csv";
   a.click();
   URL.revokeObjectURL(a.href);
+  _showCopyToast("✓ CSV downloaded!");
 });
 
 /* ── PDF (browser print-to-PDF) ── */
@@ -1827,6 +1911,7 @@ btnExportPdf.addEventListener("click", () => {
       + '<br/><img class="ph-plot-img" src="' + _imgData + '"/></div>';
   }
   window.print();
+  _showCopyToast("✓ Print dialog opened — save as PDF!");
 });
 
 /* ── LaTeX (.tex file download) ── */
@@ -1916,6 +2001,7 @@ ${searchMeta.pgfplots
   a.download = ((typeof t === "function") ? t("export-filename-tex") : "diophantine_solutions") + ".tex";
   a.click();
   URL.revokeObjectURL(a.href);
+  _showCopyToast("✓ LaTeX .tex file downloaded!");
 });
 
 /* ── BibTeX citation copy ── */

@@ -1275,6 +1275,42 @@ html[data-theme="dark"] .plot-legend-curve { color: #60a5fa; }
 .history-delete-btn:hover { background: rgba(220,53,53,.12); color: #e06c6c; border-color: #e06c6c; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   PREMIUM MICRO-INTERACTIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Button ripple ──────────────────────────────────────────────────────── */
+button { position: relative; overflow: hidden; }
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: ripple-anim .55s linear;
+  background: rgba(255,255,255,0.22);
+  pointer-events: none;
+}
+@keyframes ripple-anim {
+  to { transform: scale(4); opacity: 0; }
+}
+
+/* ── Table row entrance ─────────────────────────────────────────────────── */
+@keyframes rowSlideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+#results-tbody tr.new-row {
+  animation: rowSlideIn .22s ease both;
+}
+
+/* ── Solution count badge pop ───────────────────────────────────────────── */
+@keyframes badgePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.22); }
+  70%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+.badge.pop { animation: badgePop .35s ease both; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
    COPY-TO-CLIPBOARD TOAST
    ═══════════════════════════════════════════════════════════════════════════ */
 .copy-toast {
