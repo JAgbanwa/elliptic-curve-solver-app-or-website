@@ -1953,11 +1953,11 @@ if (btnExportBibtex) {
   const btnSage = document.getElementById("btn-export-sage");
   if (btnSage) {
     btnSage.addEventListener("click", () => {
-      if (!currentCurveInfo || currentCurveInfo.A === undefined) {
-        alert("Run a search first to get curve invariants for the SageMath script.");
+      if (!currentCurveInfo && allSolutions.length === 0) {
+        alert("Run a search first to get solutions for the SageMath script.");
         return;
       }
-      const ci = currentCurveInfo;
+      const ci = currentCurveInfo || {};
       const date = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
       const expr = exprInput.value.trim();
       const A = ci.A, B = ci.B;
@@ -1966,14 +1966,7 @@ if (btnExportBibtex) {
         .map(s => "    (" + s.n + ", " + s.x + ", " + s.y + "),")
         .join("\n");
 
-      const sage = [
-        "# SageMath Analysis Script — Elliptic Curve Solver",
-        "# Generated: " + date,
-        "# Original curve: y^2 = " + expr,
-        "# Short Weierstrass: " + (ci.short_weierstrass || ("y^2 = x^3 + " + A + "*x + " + B)),
-        "#",
-        "# Coordinate note: if the original curve has an x^2 term,",
-        "# points on the short Weierstrass use X_W = x_orig + (" + shift + ").",
+      const ecLines = A !== undefined ? [
         "",
         "A = " + A,
         "B = " + B,
@@ -1995,6 +1988,23 @@ if (btnExportBibtex) {
         "    if r > 0: print('Generators:', E.gens())",
         "except Exception as exc:",
         "    print('\nRank computation:', exc)",
+      ] : [
+        "",
+        "# Short Weierstrass form unavailable for this curve.",
+        "# Define E manually in SageMath if needed.",
+      ];
+
+      const sage = [
+        "# SageMath Analysis Script — Elliptic Curve Solver",
+        "# Generated: " + date,
+        "# Original curve: y^2 = " + expr,
+        A !== undefined
+          ? ("# Short Weierstrass: " + (ci.short_weierstrass || ("y^2 = x^3 + " + A + "*x + " + B)))
+          : "# Short Weierstrass: unavailable",
+        A !== undefined
+          ? ("# Coordinate note: X_W = x_orig + (" + shift + ") when x^2 term present.")
+          : "",
+      ].concat(ecLines).concat([
         "",
         "# Integer points found (original curve coordinates):",
         "solutions = [",
@@ -2002,7 +2012,7 @@ if (btnExportBibtex) {
         "]",
         "print('\nInteger points found (n, x, y):')",
         "for row in solutions: print('  n=%s: (%s, %s)' % row)",
-      ].join("\n");
+      ]).join("\n");
 
       const blob = new Blob([sage], { type: "text/plain" });
       const a = document.createElement("a");
