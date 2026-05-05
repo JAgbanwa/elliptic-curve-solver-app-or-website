@@ -2201,27 +2201,83 @@ if (btnExportBibtex) {
 /* ═══════════════════════════════════════════════════════════════════════════
    EXAMPLE CARDS
    ═══════════════════════════════════════════════════════════════════════════ */
-EXAMPLES.forEach((ex) => {
+
+// Category / icon / tag metadata for each example (parallel to EXAMPLES array)
+const GALLERY_AUG = [
+  { icon: "∿", category: "Congruent",    tags: ["congruent", "BSD", "rank"] },
+  { icon: "Ω", category: "Weierstrass",  tags: ["classic", "Weierstrass"] },
+  { icon: "σ", category: "Weierstrass",  tags: ["cubic", "shift"] },
+  { icon: "ℚ", category: "Congruent",    tags: ["rational n", "congruent"] },
+  { icon: "⊕", category: "Weierstrass",  tags: ["mixed", "quadratic"] },
+  { icon: "∛", category: "Fermat",       tags: ["Fermat", "cubes"] },
+  { icon: "⊙", category: "Torsion",      tags: ["torsion", "rank 0"] },
+  { icon: "κ", category: "Weierstrass",  tags: ["node cubic"] },
+  { icon: "★", category: "Large-N",      tags: ["autoscale", "known solution"] },
+  { icon: "★", category: "Large-N",      tags: ["large coefficients"] },
+  { icon: "✦", category: "Historical",   tags: ["taxicab", "1729", "Ramanujan"] },
+  { icon: "÷", category: "Advanced",     tags: ["divisor search"] },
+  { icon: "∞", category: "Large-N",      tags: ["expression range", "big n"] },
+  { icon: "∮", category: "Advanced",     tags: ["expression range"] },
+  { icon: "≡", category: "Diophantine",  tags: ["general", "polynomial"] },
+  { icon: "△", category: "Diophantine",  tags: ["Pythagorean", "classic"] },
+  { icon: "∑", category: "Historical",   tags: ["taxicab", "cubes", "1729"] },
+  { icon: "⁴", category: "Diophantine",  tags: ["degree 4", "roots"] },
+  { icon: "ⁿ", category: "Diophantine",  tags: ["3D", "powers"] },
+];
+
+// Build category filter bar
+(function buildGalleryCats() {
+  const grid = document.getElementById("example-grid");
+  if (!grid) return;
+  const cats = ["All", ...new Set(GALLERY_AUG.map(a => a.category))];
+  const bar = document.createElement("div");
+  bar.className = "gallery-categories";
+  bar.setAttribute("role", "group");
+  bar.setAttribute("aria-label", "Filter by category");
+  cats.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.className = "gallery-cat-btn" + (cat === "All" ? " active" : "");
+    btn.textContent = cat;
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      bar.querySelectorAll(".gallery-cat-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      grid.querySelectorAll(".example-card").forEach(card => {
+        card.style.display = (cat === "All" || card.dataset.category === cat) ? "" : "none";
+      });
+    });
+    bar.appendChild(btn);
+  });
+  grid.parentElement.insertBefore(bar, grid);
+})();
+
+EXAMPLES.forEach((ex, idx) => {
+  const aug = GALLERY_AUG[idx] || { icon: "∮", category: "Other", tags: [] };
   const card = document.createElement("div");
   card.className = "example-card";
+  card.dataset.category = aug.category;
   card.setAttribute("role", "button");
   card.setAttribute("tabindex", "0");
   card.setAttribute("aria-label", "Load example: " + ex.name);
 
-  // render KaTeX inside the card (after the DOM is ready)
   const isGenMode = ex.solverMode === "gen";
-  const modeBadge = isGenMode
-    ? `<span class="example-mode-badge">General Dioph.</span>`
-    : "";
   const exprLine  = isGenMode
-    ? `<code>${escHtml(ex.eq || "")}</code>`
-    : `<code>y\u00b2 = ${escHtml(ex.expr || "")}</code>`;
+    ? escHtml(ex.eq || "")
+    : `y² = ${escHtml(ex.expr || "")}`;
+  const tagHtml = aug.tags.map(t => `<span class="example-tag">${escHtml(t)}</span>`).join("");
+
   card.innerHTML = `
-    <div class="example-name">${escHtml(ex.name)}${modeBadge}</div>
-    <div class="example-expr">${exprLine}</div>
-    <div class="example-math" id="ex-math-${EXAMPLES.indexOf(ex)}"></div>
-    <div class="example-desc">${escHtml(ex.desc)}</div>
-    <div class="example-load">↗ Load this example</div>`;
+    <div class="example-card-header">
+      <span class="example-card-icon" aria-hidden="true">${aug.icon}</span>
+      <div>
+        <div class="example-card-name">${escHtml(ex.name)}</div>
+        <div class="example-card-eq"><code>${exprLine}</code></div>
+      </div>
+    </div>
+    <div class="example-math" id="ex-math-${idx}"></div>
+    <p class="example-card-desc">${escHtml(ex.desc)}</p>
+    <div class="example-card-tags">${tagHtml}</div>
+    <button class="example-card-action" type="button">↗ Load &amp; Run</button>`;
   exampleGrid.appendChild(card);
 
   function loadExample() {
@@ -2522,4 +2578,380 @@ function closeHistoryDrawer() {
   });
 
   _syncHistoryBadge();
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHAREABLE SEARCH URLs
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Collect current search params into a plain object */
+function _collectSearchParams() {
+  const mode = document.querySelector(".mode-tab.active")?.dataset.mode || "ec";
+  if (mode === "gen") {
+    const genEq    = document.getElementById("gen-eq-input");
+    const genXMin  = document.getElementById("gen-x-min");
+    const genXMax  = document.getElementById("gen-x-max");
+    const genYMin  = document.getElementById("gen-y-min");
+    const genYMax  = document.getElementById("gen-y-max");
+    return {
+      mode: "gen",
+      eq:   genEq?.value   || "",
+      nm:   nMinIn.value, nx: nMaxIn.value, nd: nDenomIn.value,
+      xm:   genXMin?.value || "", xx: genXMax?.value || "",
+      ym:   genYMin?.value || "", yx: genYMax?.value || "",
+    };
+  }
+  return {
+    mode: "ec",
+    expr: exprInput.value || "",
+    nm:   nMinIn.value, nx: nMaxIn.value, nd: nDenomIn.value,
+    xm:   xMinIn.value,  xx: xMaxIn.value,
+  };
+}
+
+/** Apply params object → fill form fields */
+function _applySearchParams(p) {
+  if (!p) return;
+  if (p.mode === "gen") {
+    switchSolverMode("gen");
+    const genEq   = document.getElementById("gen-eq-input");
+    const genXMin = document.getElementById("gen-x-min");
+    const genXMax = document.getElementById("gen-x-max");
+    const genYMin = document.getElementById("gen-y-min");
+    const genYMax = document.getElementById("gen-y-max");
+    if (genEq   && p.eq) genEq.value   = p.eq;
+    if (genXMin && p.xm) genXMin.value = p.xm;
+    if (genXMax && p.xx) genXMax.value = p.xx;
+    if (genYMin && p.ym) genYMin.value = p.ym;
+    if (genYMax && p.yx) genYMax.value = p.yx;
+  } else {
+    switchSolverMode("ec");
+    if (p.expr) exprInput.value = p.expr;
+    if (p.xm)   xMinIn.value   = p.xm;
+    if (p.xx)   xMaxIn.value   = p.xx;
+  }
+  if (p.nm !== undefined) nMinIn.value   = p.nm;
+  if (p.nx !== undefined) nMaxIn.value   = p.nx;
+  if (p.nd !== undefined) nDenomIn.value = p.nd;
+}
+
+/** Push current params to URL bar (no page reload) */
+function _pushSearchToURL(params) {
+  const p = params || _collectSearchParams();
+  const qs = new URLSearchParams(p).toString();
+  const newURL = window.location.pathname + "?" + qs;
+  window.history.replaceState(null, "", newURL);
+}
+
+/** Copy shareable link to clipboard */
+function shareSearchURL() {
+  _pushSearchToURL();
+  const url = window.location.href;
+  navigator.clipboard.writeText(url).then(
+    () => _showCopyToast("🔗 Link copied to clipboard!"),
+    () => {
+      prompt("Copy this link:", url);
+    }
+  );
+}
+
+/** On page load: auto-fill form from URL params if present */
+(function _loadFromURL() {
+  const sp = new URLSearchParams(window.location.search);
+  if (!sp.has("expr") && !sp.has("eq")) return;   // nothing to restore
+  const p = {};
+  for (const [k, v] of sp.entries()) p[k] = v;
+  // defer until DOM is ready
+  window.addEventListener("DOMContentLoaded", () => _applySearchParams(p), { once: true });
+  // if DOM already ready:
+  if (document.readyState !== "loading") _applySearchParams(p);
+})();
+
+// Wire the Share button
+(function _initShareBtn() {
+  const btn = document.getElementById("btn-share-url");
+  if (btn) btn.addEventListener("click", shareSearchURL);
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   USER ACCOUNTS  (login / register / logout)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let _currentUser = null;   // { id, username, email } or null
+
+function _setCurrentUser(user) {
+  _currentUser = user;
+  const btnSignin    = document.getElementById("btn-signin");
+  const btnUserMenu  = document.getElementById("btn-user-menu");
+  const displayName  = document.getElementById("user-display-name");
+  const btnSave      = document.getElementById("btn-save-search");
+  if (user) {
+    if (btnSignin)   btnSignin.style.display  = "none";
+    if (btnUserMenu) { btnUserMenu.style.display = "flex"; }
+    if (displayName) displayName.textContent  = user.username;
+    if (btnSave)     btnSave.style.display    = "";
+  } else {
+    if (btnSignin)   btnSignin.style.display  = "";
+    if (btnUserMenu) btnUserMenu.style.display = "none";
+    if (btnSave)     btnSave.style.display    = "none";
+  }
+}
+
+function openAuthModal(tab) {
+  const modal    = document.getElementById("auth-modal");
+  const backdrop = document.getElementById("auth-modal-backdrop");
+  if (!modal) return;
+  modal.style.display = "block";
+  if (backdrop) backdrop.classList.add("open");
+  if (tab === "register") _authSwitchTab("register");
+  else _authSwitchTab("login");
+  setTimeout(() => {
+    const firstInput = modal.querySelector(".auth-input");
+    if (firstInput) firstInput.focus();
+  }, 80);
+}
+
+function closeAuthModal() {
+  const modal    = document.getElementById("auth-modal");
+  const backdrop = document.getElementById("auth-modal-backdrop");
+  if (modal)    modal.style.display = "none";
+  if (backdrop) backdrop.classList.remove("open");
+}
+
+function _authSwitchTab(tab) {
+  const loginPanel  = document.getElementById("auth-panel-login");
+  const regPanel    = document.getElementById("auth-panel-register");
+  const loginTab    = document.getElementById("auth-tab-login");
+  const regTab      = document.getElementById("auth-tab-register");
+  const isLogin = tab !== "register";
+  if (loginPanel)  loginPanel.style.display  = isLogin ? "" : "none";
+  if (regPanel)    regPanel.style.display    = isLogin ? "none" : "";
+  if (loginTab)    { loginTab.classList.toggle("active", isLogin);   loginTab.setAttribute("aria-selected", isLogin); }
+  if (regTab)      { regTab.classList.toggle("active", !isLogin);    regTab.setAttribute("aria-selected", !isLogin); }
+  // clear errors
+  const loginErr = document.getElementById("login-error");
+  const regErr   = document.getElementById("reg-error");
+  if (loginErr) loginErr.style.display = "none";
+  if (regErr)   regErr.style.display   = "none";
+}
+
+async function _doLogin(username, password) {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  return res.json();
+}
+
+async function _doRegister(username, email, password) {
+  const res = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, email, password }),
+  });
+  return res.json();
+}
+
+async function _doLogout() {
+  await fetch("/api/auth/logout", { method: "POST" });
+  _setCurrentUser(null);
+  _showCopyToast("👋 Signed out.");
+}
+
+(function _initAuth() {
+  // Check session on load
+  fetch("/api/auth/me").then(r => r.json()).then(d => {
+    if (d.ok && d.user) _setCurrentUser(d.user);
+  }).catch(() => {});
+
+  // Sign In button
+  const btnSignin = document.getElementById("btn-signin");
+  if (btnSignin) btnSignin.addEventListener("click", () => openAuthModal("login"));
+
+  // Close modal
+  const btnClose  = document.getElementById("btn-auth-close");
+  const backdrop  = document.getElementById("auth-modal-backdrop");
+  if (btnClose) btnClose.addEventListener("click", closeAuthModal);
+  if (backdrop) backdrop.addEventListener("click", closeAuthModal);
+
+  // Tab buttons
+  const tabLogin = document.getElementById("auth-tab-login");
+  const tabReg   = document.getElementById("auth-tab-register");
+  if (tabLogin) tabLogin.addEventListener("click", () => _authSwitchTab("login"));
+  if (tabReg)   tabReg.addEventListener("click",   () => _authSwitchTab("register"));
+
+  // Login form
+  const formLogin = document.getElementById("form-login");
+  if (formLogin) formLogin.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl  = document.getElementById("login-error");
+    const btn    = formLogin.querySelector(".auth-submit");
+    const uname  = document.getElementById("login-username")?.value.trim();
+    const pwd    = document.getElementById("login-password")?.value;
+    if (!uname || !pwd) return;
+    btn.disabled = true; btn.textContent = "Signing in…";
+    const d = await _doLogin(uname, pwd);
+    btn.disabled = false; btn.textContent = "Sign In";
+    if (d.ok) {
+      _setCurrentUser(d.user);
+      closeAuthModal();
+      _showCopyToast(`👋 Welcome back, ${d.user.username}!`);
+    } else {
+      if (errEl) { errEl.textContent = d.error || "Login failed."; errEl.style.display = ""; }
+    }
+  });
+
+  // Register form
+  const formReg = document.getElementById("form-register");
+  if (formReg) formReg.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl  = document.getElementById("reg-error");
+    const btn    = formReg.querySelector(".auth-submit");
+    const uname  = document.getElementById("reg-username")?.value.trim();
+    const email  = document.getElementById("reg-email")?.value.trim();
+    const pwd    = document.getElementById("reg-password")?.value;
+    if (!uname || !email || !pwd) return;
+    btn.disabled = true; btn.textContent = "Creating account…";
+    const d = await _doRegister(uname, email, pwd);
+    btn.disabled = false; btn.textContent = "Create Account";
+    if (d.ok) {
+      _setCurrentUser(d.user);
+      closeAuthModal();
+      _showCopyToast(`🎉 Welcome, ${d.user.username}! Account created.`);
+    } else {
+      if (errEl) { errEl.textContent = d.error || "Registration failed."; errEl.style.display = ""; }
+    }
+  });
+
+  // User menu dropdown
+  const btnUserMenu = document.getElementById("btn-user-menu");
+  const userDropdown = document.getElementById("user-dropdown");
+  if (btnUserMenu && userDropdown) {
+    btnUserMenu.addEventListener("click", () => {
+      const open = userDropdown.classList.toggle("open");
+      btnUserMenu.setAttribute("aria-expanded", open);
+    });
+    document.addEventListener("click", (e) => {
+      if (!btnUserMenu.contains(e.target) && !userDropdown.contains(e.target)) {
+        userDropdown.classList.remove("open");
+        btnUserMenu.setAttribute("aria-expanded", false);
+      }
+    });
+  }
+
+  // Logout
+  const btnLogout = document.getElementById("btn-logout");
+  if (btnLogout) btnLogout.addEventListener("click", async () => {
+    if (userDropdown) { userDropdown.classList.remove("open"); }
+    await _doLogout();
+  });
+
+  // My Saved Searches drawer
+  const btnMySaved = document.getElementById("btn-my-searches");
+  if (btnMySaved) btnMySaved.addEventListener("click", () => {
+    if (userDropdown) userDropdown.classList.remove("open");
+    openSavedDrawer();
+  });
+
+  // Escape key closes auth modal
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAuthModal();
+  });
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SAVE SEARCH  (server-side, requires login)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+async function saveCurrentSearch() {
+  if (!_currentUser) { openAuthModal("login"); return; }
+  const params = _collectSearchParams();
+  const expr   = params.expr || params.eq || "search";
+  const title  = `${expr}  n=[${params.nm},${params.nx}]`;
+  const resultCount = allSolutions ? allSolutions.length : 0;
+  const res = await fetch("/api/searches", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, params, result_count: resultCount }),
+  });
+  const d = await res.json();
+  if (d.ok) {
+    _showCopyToast("💾 Search saved!");
+  } else {
+    _showCopyToast("⚠ Could not save: " + (d.error || "unknown error"));
+  }
+}
+
+function openSavedDrawer() {
+  const drawer   = document.getElementById("saved-drawer");
+  const backdrop = document.getElementById("saved-backdrop");
+  if (drawer)   drawer.classList.add("open");
+  if (backdrop) backdrop.classList.add("open");
+  document.body.style.overflow = "hidden";
+  _renderSavedList();
+}
+
+function closeSavedDrawer() {
+  const drawer   = document.getElementById("saved-drawer");
+  const backdrop = document.getElementById("saved-backdrop");
+  if (drawer)   drawer.classList.remove("open");
+  if (backdrop) backdrop.classList.remove("open");
+  document.body.style.overflow = "";
+}
+
+async function _renderSavedList() {
+  const listEl = document.getElementById("saved-list");
+  if (!listEl) return;
+  listEl.innerHTML = `<div class="history-empty">Loading…</div>`;
+  if (!_currentUser) {
+    listEl.innerHTML = `<div class="history-empty">Sign in to see saved searches.</div>`;
+    return;
+  }
+  const res = await fetch("/api/searches");
+  const d = await res.json();
+  if (!d.ok || !d.searches.length) {
+    listEl.innerHTML = `<div class="history-empty">No saved searches yet. Run a search and click 💾 Save.</div>`;
+    return;
+  }
+  listEl.innerHTML = "";
+  d.searches.forEach(s => {
+    const params = JSON.parse(s.params || "{}");
+    const item = document.createElement("div");
+    item.className = "history-item";
+    item.innerHTML = `
+      <div class="history-meta">
+        <span class="history-expr">${escHtml(s.title)}</span>
+        <span class="history-count">${s.result_count} solutions</span>
+      </div>
+      <div class="history-range">${escHtml(s.saved_at.slice(0, 16).replace("T", " "))}</div>
+      <div class="history-actions">
+        <button class="history-load-btn" type="button">↗ Load</button>
+        <button class="history-del-btn" type="button" data-id="${s.id}">✕</button>
+      </div>`;
+    item.querySelector(".history-load-btn").addEventListener("click", () => {
+      _applySearchParams(params);
+      closeSavedDrawer();
+      startSearch();
+    });
+    item.querySelector(".history-del-btn").addEventListener("click", async (e) => {
+      const id = e.currentTarget.dataset.id;
+      await fetch(`/api/searches/${id}`, { method: "DELETE" });
+      item.remove();
+      if (!listEl.querySelector(".history-item")) {
+        listEl.innerHTML = `<div class="history-empty">No saved searches yet.</div>`;
+      }
+    });
+    listEl.appendChild(item);
+  });
+}
+
+(function _initSaveSearch() {
+  const btnSave = document.getElementById("btn-save-search");
+  if (btnSave) btnSave.addEventListener("click", saveCurrentSearch);
+
+  const btnClose   = document.getElementById("btn-saved-close");
+  const backdrop   = document.getElementById("saved-backdrop");
+  if (btnClose)  btnClose.addEventListener("click",   closeSavedDrawer);
+  if (backdrop)  backdrop.addEventListener("click",   closeSavedDrawer);
 })();

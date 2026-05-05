@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=42" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=43" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -91,6 +91,22 @@
           <button id="btn-wp-picker" class="btn-wp-picker" type="button" title="Choose background wallpaper" aria-haspopup="true" aria-expanded="false" aria-controls="wp-picker-menu">
             🎨
           </button>
+        </div>
+
+        <!-- ── User auth ────────────────────────────────────────────── -->
+        <div class="user-menu-wrap" id="user-menu-wrap">
+          <!-- Logged-out state -->
+          <button id="btn-signin" class="btn-signin" type="button" aria-haspopup="dialog">Sign In</button>
+          <!-- Logged-in state (hidden until authenticated) -->
+          <button id="btn-user-menu" class="btn-user-menu" type="button" aria-haspopup="true" aria-expanded="false" style="display:none">
+            <span class="user-avatar" aria-hidden="true">👤</span>
+            <span id="user-display-name" class="user-display-name"></span>
+            <span class="user-caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="user-dropdown" class="user-dropdown" role="menu">
+            <button class="user-dd-item" id="btn-my-searches" role="menuitem">📂 My Saved Searches</button>
+            <button class="user-dd-item user-dd-danger" id="btn-logout" role="menuitem">Sign Out</button>
+          </div>
         </div>
       </nav>
     </div>
@@ -540,6 +556,8 @@
               <button id="btn-export-latex" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-latex">&#8595; Export LaTeX</button>
               <button id="btn-export-bibtex" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-bibtex">&#128196; Cite BibTeX</button>
               <button id="btn-export-sage" class="btn btn-ghost btn-sm" type="button" title="Download SageMath analysis script">&#x1F9EE; SageMath</button>
+              <button id="btn-share-url" class="btn btn-ghost btn-sm btn-share" type="button" title="Copy shareable link to this search">🔗 Share</button>
+              <button id="btn-save-search" class="btn btn-ghost btn-sm btn-save" type="button" title="Save this search to your account" style="display:none">💾 Save</button>
             </div>
             <div class="pt-filter-group" role="group" aria-label="Filter shown points" title="Show: All points | Integer (&#x2124;) only | Rational non-integer (&#x211A;&#x2216;&#x2124;) only">
               <button class="pt-filter-btn active" data-filter="all" type="button">All</button>
@@ -712,6 +730,56 @@
   <!-- Copy-toast notification -->
   <div id="copy-toast" class="copy-toast" aria-live="polite"></div>
 
+  <!-- ─── AUTH MODAL ──────────────────────────────────────────────────────── -->
+  <div id="auth-modal-backdrop" class="auth-modal-backdrop" aria-hidden="true"></div>
+  <div id="auth-modal" class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" style="display:none">
+    <button class="auth-modal-close" id="btn-auth-close" type="button" aria-label="Close">✕</button>
+
+    <!-- Tabs -->
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab active" id="auth-tab-login" role="tab" aria-selected="true" aria-controls="auth-panel-login">Sign In</button>
+      <button class="auth-tab" id="auth-tab-register" role="tab" aria-selected="false" aria-controls="auth-panel-register">Create Account</button>
+    </div>
+
+    <!-- Sign In panel -->
+    <div id="auth-panel-login" class="auth-panel" role="tabpanel" aria-labelledby="auth-tab-login">
+      <h2 class="auth-modal-title" id="auth-modal-title">Welcome back</h2>
+      <form id="form-login" class="auth-form" novalidate>
+        <label class="auth-label" for="login-username">Username</label>
+        <input class="auth-input" id="login-username" name="username" type="text" autocomplete="username" required placeholder="your_username">
+        <label class="auth-label" for="login-password">Password</label>
+        <input class="auth-input" id="login-password" name="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+        <p id="login-error" class="auth-error" role="alert" style="display:none"></p>
+        <button class="btn btn-primary auth-submit" type="submit">Sign In</button>
+      </form>
+    </div>
+
+    <!-- Register panel -->
+    <div id="auth-panel-register" class="auth-panel" role="tabpanel" aria-labelledby="auth-tab-register" style="display:none">
+      <h2 class="auth-modal-title">Create your account</h2>
+      <form id="form-register" class="auth-form" novalidate>
+        <label class="auth-label" for="reg-username">Username</label>
+        <input class="auth-input" id="reg-username" name="username" type="text" autocomplete="username" required placeholder="your_username" maxlength="40">
+        <label class="auth-label" for="reg-email">Email</label>
+        <input class="auth-input" id="reg-email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+        <label class="auth-label" for="reg-password">Password <small>(min 8 chars)</small></label>
+        <input class="auth-input" id="reg-password" name="password" type="password" autocomplete="new-password" required placeholder="••••••••" minlength="8">
+        <p id="reg-error" class="auth-error" role="alert" style="display:none"></p>
+        <button class="btn btn-primary auth-submit" type="submit">Create Account</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─── MY SAVED SEARCHES DRAWER ────────────────────────────────────────── -->
+  <div id="saved-backdrop" class="history-backdrop" aria-hidden="true"></div>
+  <div id="saved-drawer" class="history-drawer" role="dialog" aria-modal="true" aria-label="Saved searches">
+    <div class="history-drawer-header">
+      <span class="history-drawer-title">My Saved Searches</span>
+      <button id="btn-saved-close" class="history-close-btn" type="button" aria-label="Close">✕</button>
+    </div>
+    <div id="saved-list" class="history-list"></div>
+  </div>
+
   <!-- Search History Drawer -->
   <div id="history-backdrop" class="history-backdrop" aria-hidden="true"></div>
   <div id="history-drawer" class="history-drawer" role="dialog" aria-modal="true" aria-label="Search history">
@@ -723,8 +791,8 @@
     <div id="history-list" class="history-list"></div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=42"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=42"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=43"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=43"></script>
 
   <!-- ─── BACKGROUND WALLPAPER ──────────────────────────────────────────────
        Five animated math-aesthetic themes + "none".  Choice is persisted in
