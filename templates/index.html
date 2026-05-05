@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=33" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=34" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -521,6 +521,11 @@
               <button id="btn-export-bibtex" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-bibtex">&#128196; Cite BibTeX</button>
               <button id="btn-export-sage" class="btn btn-ghost btn-sm" type="button" title="Download SageMath analysis script">&#x1F9EE; SageMath</button>
             </div>
+            <div class="pt-filter-group" role="group" aria-label="Filter shown points" title="Show: All points | Integer (&#x2124;) only | Rational non-integer (&#x211A;&#x2216;&#x2124;) only">
+              <button class="pt-filter-btn active" data-filter="all" type="button">All</button>
+              <button class="pt-filter-btn" data-filter="integer" type="button">&#x2124; Integer</button>
+              <button class="pt-filter-btn" data-filter="rational" type="button">&#x211A; Rational</button>
+            </div>
           </div>
         </div>
         <div class="table-scroll">
@@ -551,6 +556,12 @@
           <button id="btn-zoom-reset" class="btn btn-ghost btn-xs" type="button" title="Reset view" data-i18n="btn-zoom-reset">⟳ Reset</button>
           <span class="plot-toolbar-sep"></span>
           <button id="btn-toggle-labels" class="btn btn-ghost btn-xs" type="button" data-i18n="btn-hide-labels">Hide labels</button>
+          <span class="plot-toolbar-sep"></span>
+          <div class="pt-filter-group pt-filter-compact" role="group" aria-label="Filter shown points" title="Show: All points | Integer (&#x2124;) only | Rational non-integer (&#x211A;&#x2216;&#x2124;) only">
+            <button class="pt-filter-btn active" data-filter="all" type="button">All</button>
+            <button class="pt-filter-btn" data-filter="integer" type="button">&#x2124;</button>
+            <button class="pt-filter-btn" data-filter="rational" type="button">&#x211A;</button>
+          </div>
         </div>
         <div id="plot-container" class="plot-container">
           <canvas id="curve-canvas"></canvas>
@@ -692,7 +703,7 @@
     <div id="history-list" class="history-list"></div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=33"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=33"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=34"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=34"></script>
 </body>
 </html>

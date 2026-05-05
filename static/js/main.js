@@ -267,6 +267,8 @@ let viewport    = null;   // {xMin, xMax, yMin, yMax} — current zoom/pan view
 let showPointLabels = true;   // show (x,y) labels next to solution dots
 let _canvasEventsReady = false; // guard: interaction events attached once
 let currentCurveInfo = null;  // last received curve_info SSE payload
+let currentPointFilter = "all"; // "all" | "integer" | "rational"
+let plotSolsForN       = [];    // solutions sent to last /api/plot, for client-side filter
 // Search metadata — captured at search start, used by PDF/LaTeX export
 let searchMeta = {};      // snapshot of search parameters
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -435,6 +437,9 @@ function clearResults() {
   const glSection = document.getElementById("group-law-section");
   if (glSection) glSection.style.display = "none";
   currentCurveInfo = null;
+  currentPointFilter = "all";
+  plotSolsForN = [];
+  _syncFilterUI("all");
 }
 
 function addRows(batch) {
@@ -503,6 +508,68 @@ function _updateGroupLawOptions() {
 
 function escHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** True if the value string represents an integer (not a fraction or decimal). */
+function _isIntegerVal(s) {
+  const str = String(s).trim();
+  if (str.includes('/')) return false;
+  const n = Number(str);
+  return Number.isFinite(n) && Number.isInteger(n);
+}
+
+/** True if the solution passes the current point-type filter. */
+function _passesPointFilter(sol) {
+  if (currentPointFilter === "all") return true;
+  const isInt = _isIntegerVal(sol.x) && _isIntegerVal(sol.y);
+  return currentPointFilter === "integer" ? isInt : !isInt;
+}
+
+/** Sync active state across all .pt-filter-btn elements. */
+function _syncFilterUI(filter) {
+  document.querySelectorAll(".pt-filter-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.filter === filter);
+  });
+}
+
+/** Rebuild the results table from allSolutions respecting currentPointFilter. */
+function _rebuildTable() {
+  resultsBody.innerHTML = "";
+  const filtered = allSolutions.filter(_passesPointFilter);
+  let localIdx = 0, localLastN = null;
+  filtered.forEach(({ n, x, y }) => {
+    localIdx++;
+    if (String(n) !== localLastN) {
+      localLastN = String(n);
+      const gtr = document.createElement("tr");
+      gtr.className = "n-group-row";
+      gtr.innerHTML = `<td colspan="6">n = ${escHtml(String(n))}</td>`;
+      resultsBody.appendChild(gtr);
+    }
+    let hBits = "0";
+    try {
+      const strX = String(x).replace(/^-/, "").split("/")[0];
+      const strY = String(y).replace(/^-/, "").split("/")[0];
+      const bigX = BigInt(strX), bigY = BigInt(strY);
+      const m = bigX > bigY ? bigX : bigY;
+      if (m > 1n) {
+        let bits = 0, v = m; while (v > 0n) { v >>= 1n; bits++; }
+        hBits = bits.toString();
+      }
+    } catch (_) { hBits = ""; }
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${localIdx}</td>
+      <td>${escHtml(String(n))}</td>
+      <td>${escHtml(String(x))}</td>
+      <td>${escHtml(String(y))}</td>
+      <td class="cell-height">${hBits}</td>
+      <td class="cell-valid">${(typeof t === "function") ? t("cell-verified") : "✓ verified"}</td>`;
+    resultsBody.appendChild(tr);
+  });
+  const cnt = filtered.length;
+  const _sp = (typeof t === "function") ? (cnt !== 1 ? t("sol-plural") : t("sol-singular")) : (cnt !== 1 ? "solutions" : "solution");
+  solCount.textContent = `${cnt} ${_sp}`;
 }
 
 function buildSearchURL() {
@@ -1098,6 +1165,7 @@ async function loadPlot() {
     }
     solsForN = allSolutions.filter(s => String(s.n) === plotN).map(s => ({ x: s.x, y: s.y }));
   }
+  plotSolsForN = solsForN;
 
   const body = { mode: isGen ? "gen" : "ec", n_val: plotN,
                  x_min: xMin, x_max: xMax, solutions: solsForN };
@@ -1179,6 +1247,13 @@ function renderPlot() {
   const { pos_segments, neg_segments, sol_points } = plotData;
   const { xMin: x_min, xMax: x_max, yMin: y_min, yMax: y_max } = viewport;
 
+  // Filtered solution points to draw, based on currentPointFilter
+  const _visSolPts = plotSolsForN.length > 0
+    ? plotSolsForN.filter(_passesPointFilter)
+        .map(s => [parseFloat(s.x), parseFloat(s.y)])
+        .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b))
+    : sol_points;
+
   const isDark = document.documentElement.getAttribute("data-theme") !== "light";
   const tx = x => PAD_L + (x - x_min) / (x_max - x_min) * PW;
   const ty = y => PAD_T + (1 - (y - y_min) / (y_max - y_min)) * PH;
@@ -1259,8 +1334,8 @@ function renderPlot() {
   for (const seg of pos_segments) drawSeg(seg);
   for (const seg of neg_segments) drawSeg(seg);
 
-  // Integer solution points + labels (also clipped to plot area)
-  for (const [sx, sy] of sol_points) {
+  // Solution points + labels (clipped; filtered by point-type toggle)
+  for (const [sx, sy] of _visSolPts) {
     const px = tx(sx), py = ty(sy);
     // dot
     ctx.fillStyle   = "#ef4444";
@@ -1298,8 +1373,10 @@ function renderPlot() {
   const cap = document.getElementById("plot-caption");
   if (cap) {
     const hasCurve = pos_segments.length > 0 || neg_segments.length > 0;
+    const _ptNote = currentPointFilter === "integer" ? " \u2014 \u2124 filter active"
+                  : currentPointFilter === "rational" ? " \u2014 \u211a filter active" : "";
     let capText = `Curve for n\u202f=\u202f${plotData.n_val}\u2002|\u2002`
-      + `${sol_points.length} integer point${sol_points.length !== 1 ? "s" : ""} highlighted`;
+      + `${_visSolPts.length} point${_visSolPts.length !== 1 ? "s" : ""} highlighted${_ptNote}`;
     if (!hasCurve) {
       const s = plotData.curve_strategy || "";
       const reason = s === "brute3"          ? "equation is not polynomial in y \u2014 curve shape unavailable"
@@ -1494,6 +1571,16 @@ if (btnToggleLabels) {
     if (plotData) renderPlot();
   });
 }
+
+// Point-type filter toggle (All / ℤ Integer / ℚ Rational)
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".pt-filter-btn");
+  if (!btn) return;
+  currentPointFilter = btn.dataset.filter || "all";
+  _syncFilterUI(currentPointFilter);
+  if (allSolutions.length > 0) _rebuildTable();
+  if (plotData) renderPlot();
+});
 
 // Re-render on window resize
 window.addEventListener("resize", () => { if (plotData) renderPlot(); });

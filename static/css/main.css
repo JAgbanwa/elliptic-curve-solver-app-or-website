@@ -1446,3 +1446,29 @@ html[data-theme="dark"] .plot-legend-curve { color: #60a5fa; }
 }
 .mode-select:focus { border-color: var(--accent); }
 
+/* ── Point-type filter toggle (All / ℤ Integer / ℚ Rational) ─────────────── */
+.pt-filter-group {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.pt-filter-btn {
+  background: var(--surface2);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 5px 10px;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.pt-filter-btn:last-child { border-right: none; }
+.pt-filter-btn:hover:not(.active) { background: var(--border); color: var(--text); }
+.pt-filter-btn.active { background: var(--accent); color: #fff; }
+.pt-filter-compact .pt-filter-btn { font-size: .72rem; padding: 3px 7px; }
+
