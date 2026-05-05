@@ -476,13 +476,13 @@ function addRows(batch) {
   });
   // keep newest in view
   resultsBody.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  // refresh group law dropdowns with newly found solutions
-  _updateGroupLawOptions();
+  // refresh group law dropdowns with newly found solutions and show panel
+  _showGroupLawSection();
 }
 
 function _showGroupLawSection() {
   const glSection = document.getElementById("group-law-section");
-  if (glSection && currentSolverMode === "ec") {
+  if (glSection) {
     glSection.style.display = "";
     _updateGroupLawOptions();
   }
