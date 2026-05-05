@@ -67,7 +67,7 @@ body {
   opacity: 1;
 }
 /* Everything on top of the canvas */
-body > *:not(#bg-canvas) { position: relative; z-index: 1; }
+body > *:not(#bg-canvas):not(#wp-picker-menu) { position: relative; z-index: 1; }
 
 a { color: var(--accent2); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -148,7 +148,7 @@ code { font-family: var(--font-mono); font-size: .87em;
   background: var(--accent-glow);
   border-color: var(--accent);
 }
-.wp-picker-menu {
+#wp-picker-menu {
   display: none;
   position: fixed;
   min-width: 180px;
@@ -159,7 +159,7 @@ code { font-family: var(--font-mono); font-size: .87em;
   padding: 6px 5px;
   z-index: 9999;
 }
-.wp-picker-menu.open { display: block; }
+#wp-picker-menu.open { display: block; }
 .wp-picker-label {
   font-size: .7rem;
   font-weight: 700;
