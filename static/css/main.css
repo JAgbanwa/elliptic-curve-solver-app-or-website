@@ -1228,3 +1228,221 @@ html[data-theme="dark"] .plot-legend-curve { color: #60a5fa; }
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HEIGHT BADGE (results table)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cell-height {
+  color: var(--text-dim);
+  font-size: .75rem;
+  font-family: var(--font-mono);
+}
+#th-height {
+  font-size: .72rem;
+  color: var(--accent2);
+  cursor: help;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TORSION & FROBENIUS INLINE PANELS (inside curve-info card)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ci-tools-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+}
+.ci-tool-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-radius: 4px;
+  font-size: .78rem; font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.ci-tool-btn:hover { background: var(--accent); color: #fff; }
+.ci-tool-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.ci-inline-result {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent2);
+  border-radius: 6px;
+  font-size: .82rem;
+}
+.ci-inline-result .ci-inline-title {
+  font-weight: 700;
+  color: var(--accent2);
+  margin-bottom: 6px;
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.ci-torsion-group {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.ci-torsion-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ci-torsion-pt {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 9px;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+}
+.ci-torsion-pt .torsion-order {
+  color: var(--accent2);
+  font-size: .7rem;
+  margin-left: 4px;
+}
+
+/* Frobenius trace table */
+.frobenius-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .78rem;
+  margin-top: 6px;
+}
+.frobenius-table th {
+  background: var(--surface2);
+  padding: 4px 10px;
+  text-align: left;
+  color: var(--text-dim);
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  border-bottom: 1px solid var(--border);
+}
+.frobenius-table td {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  border-bottom: 1px solid rgba(48,54,61,.4);
+}
+.frobenius-table tr:last-child td { border-bottom: none; }
+.frobenius-ap-pos { color: var(--green); }
+.frobenius-ap-neg { color: var(--red); }
+.frobenius-ap-zero { color: var(--amber); font-weight: 700; }
+.frobenius-bad { color: var(--text-dim); font-style: italic; }
+.bsd-heuristic {
+  margin-top: 8px;
+  font-size: .78rem;
+  color: var(--text-dim);
+}
+.bsd-heuristic strong { color: var(--accent2); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GROUP LAW CALCULATOR PANEL
+   ═══════════════════════════════════════════════════════════════════════════ */
+.group-law-section {
+  margin: 16px 0 4px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.group-law-header {
+  padding: 10px 16px 8px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.group-law-title {
+  margin: 0 0 4px;
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.group-law-hint {
+  margin: 0;
+  font-size: .78rem;
+  color: var(--text-dim);
+}
+.group-law-inputs {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+.gl-point-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 140px;
+}
+.gl-op-badge {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--accent);
+  padding-bottom: 4px;
+  align-self: flex-end;
+  flex-shrink: 0;
+}
+.gl-result {
+  margin: 0 16px 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green);
+  border-radius: 5px;
+  background: var(--bg);
+  font-size: .85rem;
+}
+.gl-result .gl-result-title {
+  font-weight: 700;
+  color: var(--green);
+  margin-bottom: 4px;
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.gl-result-point {
+  font-family: var(--font-mono);
+  font-size: .9rem;
+  color: var(--text);
+}
+.gl-result-infinity {
+  font-style: italic;
+  color: var(--text-dim);
+}
+.gl-result-rational {
+  font-size: .75rem;
+  color: var(--amber);
+  margin-top: 4px;
+}
+.gl-result-integer {
+  font-size: .75rem;
+  color: var(--green);
+  margin-top: 4px;
+}
+.mode-select {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: .85rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.mode-select:focus { border-color: var(--accent); }
+

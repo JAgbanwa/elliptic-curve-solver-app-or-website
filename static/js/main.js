@@ -266,6 +266,7 @@ let plotData    = null;   // last successful /api/plot response
 let viewport    = null;   // {xMin, xMax, yMin, yMax} — current zoom/pan view
 let showPointLabels = true;   // show (x,y) labels next to solution dots
 let _canvasEventsReady = false; // guard: interaction events attached once
+let currentCurveInfo = null;  // last received curve_info SSE payload
 // Search metadata — captured at search start, used by PDF/LaTeX export
 let searchMeta = {};      // snapshot of search parameters
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -431,6 +432,9 @@ function clearResults() {
   const ps = document.getElementById("plot-section");
   if (ps) ps.style.display = "none";
   if (xRangeHintMsg) xRangeHintMsg.style.display = "none";
+  const glSection = document.getElementById("group-law-section");
+  if (glSection) glSection.style.display = "none";
+  currentCurveInfo = null;
 }
 
 function addRows(batch) {
@@ -443,9 +447,22 @@ function addRows(batch) {
       lastGroupN = String(n);
       const gtr = document.createElement("tr");
       gtr.className = "n-group-row";
-      gtr.innerHTML = `<td colspan="5">n = ${escHtml(String(n))}</td>`;
+      gtr.innerHTML = `<td colspan="6">n = ${escHtml(String(n))}</td>`;
       resultsBody.appendChild(gtr);
     }
+
+    // Naive logarithmic height h(P) = ⌊log₂(max(|x|, |y|, 1))⌋ + 1  (bits)
+    let hBits = "0";
+    try {
+      const bigX = BigInt(String(x).replace(/^-/, ""));
+      const bigY = BigInt(String(y).replace(/^-/, ""));
+      const m    = bigX > bigY ? bigX : bigY;
+      if (m > 1n) {
+        let bits = 0, v = m;
+        while (v > 0n) { v >>= 1n; bits++; }
+        hBits = bits.toString();
+      }
+    } catch (_) { hBits = ""; }
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -453,11 +470,35 @@ function addRows(batch) {
       <td>${escHtml(String(n))}</td>
       <td>${escHtml(String(x))}</td>
       <td>${escHtml(String(y))}</td>
+      <td class="cell-height">${hBits}</td>
       <td class="cell-valid">${(typeof t === "function") ? t("cell-verified") : "✓ verified"}</td>`;
     resultsBody.appendChild(tr);
   });
   // keep newest in view
   resultsBody.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  // refresh group law dropdowns with newly found solutions
+  _updateGroupLawOptions();
+}
+
+function _showGroupLawSection() {
+  const glSection = document.getElementById("group-law-section");
+  if (glSection && currentSolverMode === "ec") {
+    glSection.style.display = "";
+    _updateGroupLawOptions();
+  }
+}
+
+function _updateGroupLawOptions() {
+  const selP = document.getElementById("gl-p-select");
+  const selQ = document.getElementById("gl-q-select");
+  if (!selP || !selQ) return;
+  const opts = ['<option value="O">O (point at infinity)</option>'];
+  allSolutions.slice(0, 200).forEach((sol, i) => {
+    opts.push('<option value="' + i + '">(' + escHtml(String(sol.x)) + ', ' +
+      escHtml(String(sol.y)) + ') n=' + escHtml(String(sol.n)) + '</option>');
+  });
+  selP.innerHTML = opts.join("");
+  selQ.innerHTML = opts.join("");
 }
 
 function escHtml(s) {
@@ -616,6 +657,8 @@ function startSearch() {
 
       case "curve_info": {
         const ci = msg;
+        // Store latest curve info for group law / SageMath export
+        currentCurveInfo = ci;
         const def = v => v !== undefined && v !== null ? escHtml(String(v)) : "";
 
         const badPrimes = Array.isArray(ci.primes_bad_reduction)
@@ -623,7 +666,7 @@ function startSearch() {
           : def(ci.primes_bad_reduction);
 
         const errNote = ci.error
-          ? `<div class="ci-error">⚠ ${def(ci.error)}</div>`
+          ? `<div class="ci-error">\u26a0 ${def(ci.error)}</div>`
           : "";
 
         let body = errNote;
@@ -660,19 +703,35 @@ function startSearch() {
             </div>`;
         }
 
+        // LMFDB link — use direct search URL when available
+        const lmfdbHref = ci.lmfdb_url
+          ? escHtml(ci.lmfdb_url)
+          : "https://www.lmfdb.org/EllipticCurve/Q/";
         if (ci.lmfdb_ainvs) {
           body += `
             <div class="ci-actions">
               <span class="ci-lmfdb-label">LMFDB a-invariants:</span>
               <code class="ci-lmfdb-ainv">${def(ci.lmfdb_ainvs)}</code>
-              <a href="https://www.lmfdb.org/EllipticCurve/Q/" class="ci-lmfdb-btn"
+              <a href="${lmfdbHref}" class="ci-lmfdb-btn"
                  target="_blank" rel="noopener noreferrer">Search LMFDB \u2197</a>
             </div>`;
         }
 
+        // Torsion + Frobenius tool buttons (integer A, B only)
+        const ciId = "ci-" + Date.now();
+        if (ci.A !== undefined && !String(ci.A).includes("/")) {
+          body += `
+            <div class="ci-tools-row" id="tools-${ciId}">
+              <button class="ci-tool-btn" id="btn-torsion-${ciId}" type="button">\u{1D54B} Torsion Subgroup</button>
+              <button class="ci-tool-btn" id="btn-frob-${ciId}" type="button">a<sub>p</sub> Frobenius Traces</button>
+            </div>
+            <div id="torsion-result-${ciId}" class="ci-inline-result" style="display:none"></div>
+            <div id="frob-result-${ciId}" class="ci-inline-result" style="display:none"></div>`;
+        }
+
         const tr = document.createElement("tr");
         tr.className = "curve-info-row";
-        tr.innerHTML = `<td colspan="5">
+        tr.innerHTML = `<td colspan="6">
           <details class="curve-info-card">
             <summary class="ci-summary">
               <span class="ci-chevron">\u25b8</span>
@@ -683,6 +742,92 @@ function startSearch() {
           </details>
         </td>`;
         resultsBody.appendChild(tr);
+
+        // Bind torsion + frobenius buttons after appending to DOM
+        if (ci.A !== undefined && !String(ci.A).includes("/")) {
+          const _btnT = document.getElementById(`btn-torsion-${ciId}`);
+          const _btnF = document.getElementById(`btn-frob-${ciId}`);
+          const _resT = document.getElementById(`torsion-result-${ciId}`);
+          const _resF = document.getElementById(`frob-result-${ciId}`);
+          const _ciExpr = exprInput.value.trim();
+          const _ciN    = String(ci.n);
+
+          if (_btnT) _btnT.addEventListener("click", async () => {
+            _btnT.disabled = true; _btnT.textContent = "Computing\u2026";
+            _resT.style.display = "none";
+            try {
+              const resp = await fetch("/api/torsion", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ expr: _ciExpr, n_val: _ciN }),
+              });
+              const data = await resp.json();
+              _resT.style.display = "block";
+              if (data.ok) {
+                const pts = data.torsion_points.length === 0
+                  ? `<em class="dim">No finite-order integer points found (trivial torsion)</em>`
+                  : data.torsion_points.map(p =>
+                      `<span class="ci-torsion-pt">(${escHtml(p.x)},\u2009${escHtml(p.y)})<span class="torsion-order">ord\u00a0${escHtml(p.order)}</span></span>`
+                    ).join("");
+                _resT.innerHTML = `
+                  <div class="ci-inline-title">Torsion Subgroup (Nagell-Lutz)</div>
+                  <div class="ci-torsion-group">${escHtml(data.group_structure)}</div>
+                  <div class="ci-torsion-points">${pts}</div>
+                  <div class="dim" style="font-size:.75rem;margin-top:6px">
+                    Short Weierstrass: ${escHtml(data.short_weierstrass)}
+                    &nbsp;\u2502&nbsp; 4A\u00b3+27B\u00b2 = ${escHtml(data.D)}
+                  </div>`;
+              } else {
+                _resT.innerHTML = `<span class="ci-error">\u26a0 ${escHtml(data.error)}</span>`;
+              }
+            } catch (e) {
+              _resT.style.display = "block";
+              _resT.innerHTML = `<span class="ci-error">Request failed.</span>`;
+            }
+            _btnT.disabled = false; _btnT.textContent = "\u{1D54B} Torsion Subgroup";
+          });
+
+          if (_btnF) _btnF.addEventListener("click", async () => {
+            _btnF.disabled = true; _btnF.textContent = "Computing\u2026";
+            _resF.style.display = "none";
+            try {
+              const resp = await fetch("/api/frobenius", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ expr: _ciExpr, n_val: _ciN, num_primes: 20 }),
+              });
+              const data = await resp.json();
+              _resF.style.display = "block";
+              if (data.ok) {
+                const rows = data.traces.map(r => {
+                  const cl = r.ap > 0 ? "frobenius-ap-pos" : r.ap < 0 ? "frobenius-ap-neg" : "frobenius-ap-zero";
+                  const apHtml = r.type === "bad"
+                    ? `<span class="frobenius-bad">bad red.</span>`
+                    : `<span class="${cl}">${r.ap > 0 ? "+" : ""}${r.ap}</span>`;
+                  return `<tr><td>${r.p}</td><td>${apHtml}</td><td>${r.Np}</td></tr>`;
+                }).join("");
+                _resF.innerHTML = `
+                  <div class="ci-inline-title">Frobenius Traces a<sub>p</sub> = p+1 &minus; #E(\uD835\uDD3D<sub>p</sub>)</div>
+                  <table class="frobenius-table">
+                    <thead><tr><th>p</th><th>a<sub>p</sub></th><th>#E(\uD835\uDD3D<sub>p</sub>)</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                  </table>
+                  <div class="bsd-heuristic">BSD partial sum: <strong>${data.bsd_heuristic}</strong>
+                    <span style="font-size:.72rem"> (positive \u21d2 likely rank \u2265 1)</span>
+                  </div>`;
+              } else {
+                _resF.innerHTML = `<span class="ci-error">\u26a0 ${escHtml(data.error)}</span>`;
+              }
+            } catch (e) {
+              _resF.style.display = "block";
+              _resF.innerHTML = `<span class="ci-error">Request failed.</span>`;
+            }
+            _btnF.disabled = false; _btnF.textContent = "a<sub>p</sub> Frobenius Traces";
+          });
+        }
+
+        // Show group law panel when EC mode and cubic curve
+        if (currentSolverMode === "ec" && ci.A !== undefined) {
+          _showGroupLawSection();
+        }
         break;
       }
 
@@ -1138,7 +1283,6 @@ function renderPlot() {
   for (const seg of neg_segments) drawSeg(seg);
 
   // Integer solution points + labels (also clipped to plot area)
-  let drawnPoints = 0;
   for (const [sx, sy] of sol_points) {
     const px = tx(sx), py = ty(sy);
     // dot
@@ -1146,7 +1290,6 @@ function renderPlot() {
     ctx.strokeStyle = isDark ? "#161b22" : "#ffffff";
     ctx.lineWidth   = 2;
     ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    drawnPoints++;
     // (x, y) label
     if (showPointLabels) {
       const lx = _fmtNum(sx), ly = _fmtNum(sy);
@@ -1166,17 +1309,6 @@ function renderPlot() {
       ctx.fillText(label, lxPos, lyPos);
     }
   }
-
-  // Debug overlay: show number of solution points sent and drawn
-  ctx.save();
-  ctx.font = "bold 13px monospace";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.globalAlpha = 0.85;
-  ctx.fillStyle = isDark ? "#f59e42" : "#b45309";
-  const debugMsg = `sol_points: ${sol_points.length} | drawn: ${drawnPoints}`;
-  ctx.fillText(debugMsg, PAD_L + 8, PAD_T + 8);
-  ctx.restore();
 
   ctx.restore();
 
@@ -1751,6 +1883,135 @@ if (btnExportBibtex) {
       prompt(msg, bibtex);
     });
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GROUP LAW CALCULATOR
+   ═══════════════════════════════════════════════════════════════════════════ */
+{
+  const btnGL = document.getElementById("btn-compute-gl");
+  if (btnGL) {
+    btnGL.addEventListener("click", async () => {
+      const selP = document.getElementById("gl-p-select");
+      const selQ = document.getElementById("gl-q-select");
+      const resDiv = document.getElementById("gl-result");
+      if (!selP || !selQ || !resDiv) return;
+
+      const getPoint = (sel) => {
+        if (sel.value === "O") return null;
+        const sol = allSolutions[parseInt(sel.value)];
+        return sol ? { x: String(sol.x), y: String(sol.y) } : null;
+      };
+
+      const p1 = getPoint(selP);
+      const p2 = getPoint(selQ);
+      const expr = exprInput.value.trim();
+      const nVal = allSolutions.length > 0 ? String(allSolutions[0].n)
+        : (currentCurveInfo ? String(currentCurveInfo.n) : "0");
+
+      resDiv.style.display = "none";
+      btnGL.disabled = true; btnGL.textContent = "Computing…";
+
+      try {
+        const resp = await fetch("/api/group_law", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ expr, n_val: nVal,
+            p1: p1 || { x: null, y: null }, p2: p2 || { x: null, y: null } }),
+        });
+        const data = await resp.json();
+        resDiv.style.display = "block";
+        if (data.ok) {
+          if (data.is_infinity) {
+            resDiv.innerHTML =
+              '<div class="gl-result-title">P ⊕ Q =</div>' +
+              '<div class="gl-result-infinity">O (point at infinity — identity element)</div>';
+          } else {
+            const intNote = data.is_integer
+              ? '<div class="gl-result-integer">✓ Integer point</div>'
+              : '<div class="gl-result-rational">⚠ Rational (non-integer) point</div>';
+            resDiv.innerHTML =
+              '<div class="gl-result-title">P ⊕ Q =</div>' +
+              '<div class="gl-result-point">(' + escHtml(data.result.x) + ', ' + escHtml(data.result.y) + ')</div>' +
+              intNote;
+          }
+        } else {
+          resDiv.innerHTML = '<span class="ci-error">⚠ ' + escHtml(data.error) + '</span>';
+        }
+      } catch (e) {
+        resDiv.style.display = "block";
+        resDiv.innerHTML = '<span class="ci-error">Request failed: ' + escHtml(String(e)) + '</span>';
+      }
+      btnGL.disabled = false; btnGL.textContent = "Compute P + Q";
+    });
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SAGE MATH EXPORT
+   ═══════════════════════════════════════════════════════════════════════════ */
+{
+  const btnSage = document.getElementById("btn-export-sage");
+  if (btnSage) {
+    btnSage.addEventListener("click", () => {
+      if (!currentCurveInfo || currentCurveInfo.A === undefined) {
+        alert("Run a search first to get curve invariants for the SageMath script.");
+        return;
+      }
+      const ci = currentCurveInfo;
+      const date = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+      const expr = exprInput.value.trim();
+      const A = ci.A, B = ci.B;
+      const shift = ci.x_shift || "0";
+      const solutionLines = allSolutions.slice(0, 500)
+        .map(s => "    (" + s.n + ", " + s.x + ", " + s.y + "),")
+        .join("\n");
+
+      const sage = [
+        "# SageMath Analysis Script — Elliptic Curve Solver",
+        "# Generated: " + date,
+        "# Original curve: y^2 = " + expr,
+        "# Short Weierstrass: " + (ci.short_weierstrass || ("y^2 = x^3 + " + A + "*x + " + B)),
+        "#",
+        "# Coordinate note: if the original curve has an x^2 term,",
+        "# points on the short Weierstrass use X_W = x_orig + (" + shift + ").",
+        "",
+        "A = " + A,
+        "B = " + B,
+        "E = EllipticCurve(QQ, [A, B])",
+        "print('Elliptic curve E:', E)",
+        "print('Discriminant:', E.discriminant())",
+        "print('j-invariant:', E.j_invariant())",
+        "print('Conductor:', E.conductor())",
+        "",
+        "# Torsion subgroup",
+        "T = E.torsion_subgroup()",
+        "print('\nTorsion subgroup:', T.invariants())",
+        "for P in T.points(): print('  ', P)",
+        "",
+        "# Rank",
+        "try:",
+        "    r = E.rank()",
+        "    print('\nRank:', r)",
+        "    if r > 0: print('Generators:', E.gens())",
+        "except Exception as exc:",
+        "    print('\nRank computation:', exc)",
+        "",
+        "# Integer points found (original curve coordinates):",
+        "solutions = [",
+        solutionLines,
+        "]",
+        "print('\nInteger points found (n, x, y):')",
+        "for row in solutions: print('  n=%s: (%s, %s)' % row)",
+      ].join("\n");
+
+      const blob = new Blob([sage], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "elliptic_curve_analysis.sage";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

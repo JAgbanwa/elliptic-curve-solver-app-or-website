@@ -349,6 +349,16 @@ def _curve_info(expr, n_val) -> dict:  # noqa: C901
             Br = Rational(B_w)
             if Ar.q == 1 and Br.q == 1:
                 info["lmfdb_ainvs"] = f"[0, 0, 0, {int(Ar.p)}, {int(Br.p)}]"
+                info["lmfdb_url"] = (
+                    f"https://www.lmfdb.org/EllipticCurve/Q/"
+                    f"?a4={int(Ar.p)}&a6={int(Br.p)}"
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Tschirnhaus shift  x_W = x_orig + shift  (useful for coordinate transforms)
+        try:
+            info["x_shift"] = _fmt(shift)
         except Exception:  # noqa: BLE001
             pass
 
@@ -1807,6 +1817,347 @@ def api_plot():  # noqa: C901
         "pgfplots":       pgfplots,
         "n_val":          n_val_str,
         "curve_strategy": curve_strategy,
+    }
+
+
+# ── Elliptic curve group-law helpers ─────────────────────────────────────────
+
+def _frac(r):
+    """Convert a SymPy Rational (or any numeric) to a Python Fraction."""
+    from fractions import Fraction  # noqa: PLC0415
+    from sympy import Rational as _R  # noqa: PLC0415
+    r2 = _R(r)
+    return Fraction(int(r2.p), int(r2.q))
+
+
+def _ec_add_cubic(a3, a2, a1, a0, P, Q):
+    """Add points P, Q on y² = a3·x³ + a2·x² + a1·x + a0 (Fraction coefficients).
+
+    P, Q: (Fraction, Fraction) or the string "O" (point at infinity).
+    Returns (Fraction, Fraction) or "O".
+    Uses the chord-tangent law (valid for any smooth cubic).
+    """
+    if P == "O":
+        return Q
+    if Q == "O":
+        return P
+    x1, y1 = P
+    x2, y2 = Q
+    if x1 == x2:
+        if y1 + y2 == 0:  # P = −Q (or 2-torsion y1=y2=0)
+            return "O"
+        if y1 != y2:
+            return "O"
+        # Doubling: use tangent slope = f′(x) / (2y)
+        if y1 == 0:
+            return "O"
+        f_prime = 3 * a3 * x1 * x1 + 2 * a2 * x1 + a1
+        m = f_prime / (2 * y1)
+    else:
+        m = (y2 - y1) / (x2 - x1)
+    k  = y1 - m * x1
+    # Vieta: x₁ + x₂ + x₃ = (m² − a₂) / a₃
+    x3 = (m * m - a2) / a3 - x1 - x2
+    y3 = -(m * x3 + k)
+    return (x3, y3)
+
+
+def _ec_order_cubic(a3, a2, a1, a0, P, max_order=24):
+    """Compute multiplicative order of P on y² = a3x³+a2x²+a1x+a0.
+
+    Returns an int (1–max_order) or the string f'>{max_order}'.
+    """
+    Q = P
+    for n_iter in range(1, max_order + 1):
+        if Q == "O":
+            return n_iter
+        Q = _ec_add_cubic(a3, a2, a1, a0, Q, P)
+    return f">{max_order}"
+
+
+# ── Group law endpoint ────────────────────────────────────────────────────────
+
+@app.route("/api/group_law", methods=["POST"])
+def api_group_law():
+    """Compute P + Q on y² = f(n, x) with exact Fraction arithmetic."""
+    data      = request.get_json(silent=True) or {}
+    expr_str  = data.get("expr", "").strip()
+    n_val_str = str(data.get("n_val", "0")).strip()
+    p1_raw    = data.get("p1")
+    p2_raw    = data.get("p2")
+
+    from fractions import Fraction  # noqa: PLC0415
+    from sympy import Poly, expand as _sexp, Rational as _R, Integer as _Int  # noqa: PLC0415
+
+    try:
+        n_val = int(n_val_str) if "/" not in n_val_str else Fraction(n_val_str)
+        expr  = parse_expr(expr_str)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    # Extract cubic polynomial coefficients a₃, a₂, a₁, a₀
+    try:
+        n_sub  = _Int(n_val) if isinstance(n_val, int) else _R(n_val.numerator, n_val.denominator)
+        rhs    = _sexp(expr.subs(n_sym, n_sub))
+        poly   = Poly(rhs, x_sym, domain="QQ")
+        if poly.degree() != 3:
+            return {"ok": False, "error": f"Group law requires a cubic curve; got degree {poly.degree()}."}
+        coeffs = poly.all_coeffs()
+        while len(coeffs) < 4:
+            coeffs.insert(0, _R(0))
+        a3, a2, a1, a0 = [_frac(c) for c in coeffs[-4:]]
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"Cannot extract curve coefficients: {exc}"}
+
+    def _parse_pt(d):
+        if not d or d.get("x") is None:
+            return "O"
+        try:
+            return (Fraction(str(d["x"])), Fraction(str(d["y"])))
+        except Exception as exc2:  # noqa: BLE001
+            raise ValueError(f"Invalid point: {exc2}") from exc2
+
+    try:
+        P = _parse_pt(p1_raw)
+        Q = _parse_pt(p2_raw)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    try:
+        result = _ec_add_cubic(a3, a2, a1, a0, P, Q)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"Group law computation failed: {exc}"}
+
+    if result == "O":
+        return {"ok": True, "is_infinity": True, "result": "O"}
+
+    x3, y3   = result
+    is_int   = (x3.denominator == 1 and y3.denominator == 1)
+    on_curve = str(y3 * y3 - (a3 * x3 ** 3 + a2 * x3 ** 2 + a1 * x3 + a0))
+    return {
+        "ok":             True,
+        "is_infinity":    False,
+        "is_integer":     is_int,
+        "result":         {"x": str(x3), "y": str(y3)},
+        "on_curve_check": on_curve,  # should always be "0"
+    }
+
+
+# ── Torsion subgroup endpoint ─────────────────────────────────────────────────
+
+@app.route("/api/torsion", methods=["POST"])
+def api_torsion():
+    """Compute torsion subgroup of y²=x³+Ax+B via Nagell-Lutz theorem."""
+    data      = request.get_json(silent=True) or {}
+    expr_str  = data.get("expr", "").strip()
+    n_val_str = str(data.get("n_val", "0")).strip()
+
+    from fractions import Fraction  # noqa: PLC0415
+    from sympy import factorint as _fi, Rational as _R  # noqa: PLC0415
+
+    try:
+        n_val = int(n_val_str) if "/" not in n_val_str else Fraction(n_val_str)
+        expr  = parse_expr(expr_str)
+        ci    = _curve_info(expr, n_val)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+    if "A" not in ci or "B" not in ci:
+        return {"ok": False,
+                "error": ci.get("curve_class", "Cannot compute torsion for this curve type.")}
+
+    A_r = _R(ci["A"])
+    B_r = _R(ci["B"])
+    if A_r.q != 1 or B_r.q != 1:
+        return {"ok": False,
+                "error": "Nagell-Lutz requires integer A, B in short Weierstrass form."}
+
+    A_int = int(A_r.p)
+    B_int = int(B_r.p)
+    # Nagell-Lutz divisibility parameter: D = 4A³ + 27B²
+    D_int = 4 * A_int ** 3 + 27 * B_int ** 2
+    if D_int == 0:
+        return {"ok": False, "error": "Singular curve (4A³+27B² = 0)."}
+
+    from fractions import Fraction as _Frac  # noqa: PLC0415
+
+    torsion_pts: list[tuple[int, int]] = []
+
+    # ── Case 1: y = 0  →  x³ + Ax + B = 0 ────────────────────────────────
+    if B_int != 0:
+        y0_divs = _integer_divisors(B_int, min(abs(B_int), 10 ** 7))
+    else:
+        y0_divs = [0]
+        if A_int < 0:
+            sq = math.isqrt(-A_int)
+            if sq * sq == -A_int:
+                y0_divs += [sq, -sq]
+    for xc in y0_divs:
+        if xc ** 3 + A_int * xc + B_int == 0:
+            torsion_pts.append((xc, 0))
+
+    # ── Case 2: y ≠ 0  →  y² | D  (Nagell-Lutz theorem) ──────────────────
+    D_abs = abs(D_int)
+    if 0 < D_abs < 10 ** 14:
+        try:
+            fct = _fi(D_abs)
+            # Build all y_abs such that y_abs² | D_abs:
+            # for each prime pᵉ in factorization, take p^0 … p^(e//2)
+            sq_y: set[int] = {1}
+            for p_f, e_f in fct.items():
+                new_sq: set[int] = set()
+                for ev in sq_y:
+                    for k in range(e_f // 2 + 1):
+                        new_sq.add(ev * (p_f ** k))
+                sq_y = new_sq
+
+            for y_abs in sorted(sq_y):
+                if y_abs == 0:
+                    continue
+                for y_val in [y_abs, -y_abs]:
+                    const_term = B_int - y_val * y_val   # constant of x³+Ax+(B−y²)=0
+                    if const_term == 0:
+                        xc_list: list[int] = [0]
+                        if A_int < 0:
+                            sq2 = math.isqrt(-A_int)
+                            if sq2 * sq2 == -A_int:
+                                xc_list += [sq2, -sq2]
+                    else:
+                        xc_list = _integer_divisors(const_term,
+                                                    min(abs(const_term), 10 ** 7))
+                    for xc in xc_list:
+                        if xc ** 3 + A_int * xc + B_int == y_val * y_val:
+                            torsion_pts.append((xc, y_val))
+        except Exception:  # noqa: BLE001
+            pass
+
+    # De-duplicate and compute order of each candidate point
+    seen:      set[tuple[int, int]] = set()
+    a3f, a2f, a1f, a0f = _Frac(1), _Frac(0), _Frac(A_int), _Frac(B_int)
+    pt_orders: list[dict] = []
+    max_finite_order = 1
+
+    for pt in torsion_pts:
+        if pt in seen:
+            continue
+        seen.add(pt)
+        pt_frac  = (_Frac(pt[0]), _Frac(pt[1]))
+        ord_val  = _ec_order_cubic(a3f, a2f, a1f, a0f, pt_frac)
+        pt_orders.append({"x": str(pt[0]), "y": str(pt[1]), "order": str(ord_val)})
+        try:
+            max_finite_order = max(max_finite_order, int(str(ord_val)))
+        except ValueError:
+            pass
+
+    # Determine torsion group structure (Mazur: 15 possible groups)
+    total        = len(pt_orders) + 1   # +1 for point at infinity O
+    two_torsion  = sum(1 for p in pt_orders if p["order"] == "2")
+
+    if total == 1:
+        group_str = "Trivial {O}"
+    elif total == 2:
+        group_str = "\u2124/2\u2124"
+    elif total == 4 and two_torsion == 3:
+        group_str = "\u2124/2\u2124 \u00d7 \u2124/2\u2124"
+    elif total == 8 and two_torsion == 3:
+        group_str = "\u2124/2\u2124 \u00d7 \u2124/4\u2124"
+    elif total == 16 and two_torsion == 3:
+        group_str = "\u2124/2\u2124 \u00d7 \u2124/8\u2124"
+    else:
+        group_str = f"\u2124/{max_finite_order}\u2124"
+
+    return {
+        "ok":               True,
+        "torsion_points":   pt_orders,
+        "group_structure":  group_str,
+        "short_weierstrass": ci.get("short_weierstrass",
+                                    f"y\u00b2 = x\u00b3 + {A_int}x + {B_int}"),
+        "D": str(D_int),
+    }
+
+
+# ── Frobenius traces endpoint ─────────────────────────────────────────────────
+
+@app.route("/api/frobenius", methods=["POST"])
+def api_frobenius():
+    """Compute Frobenius traces aₚ = p+1 − #E(𝔽ₚ) for the first num_primes primes."""
+    data       = request.get_json(silent=True) or {}
+    expr_str   = data.get("expr", "").strip()
+    n_val_str  = str(data.get("n_val", "0")).strip()
+    num_primes = min(25, max(5, int(data.get("num_primes", 20))))
+
+    from fractions import Fraction  # noqa: PLC0415
+    from sympy import Rational as _R  # noqa: PLC0415
+
+    try:
+        n_val = int(n_val_str) if "/" not in n_val_str else Fraction(n_val_str)
+        expr  = parse_expr(expr_str)
+        ci    = _curve_info(expr, n_val)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+    if "A" not in ci or "B" not in ci:
+        return {"ok": False,
+                "error": ci.get("curve_class", "Cannot compute for this curve type.")}
+
+    A_r = _R(ci["A"])
+    B_r = _R(ci["B"])
+    if A_r.q != 1 or B_r.q != 1:
+        return {"ok": False, "error": "Frobenius traces require integer A, B."}
+
+    A_int = int(A_r.p)
+    B_int = int(B_r.p)
+
+    # Bad primes (those dividing |Δ|)
+    bad: set[int] = set()
+    try:
+        delta_int = int(_R(ci["discriminant"]))
+        if delta_int:
+            from sympy import factorint as _fi2  # noqa: PLC0415
+            bad = set(int(k) for k in _fi2(abs(delta_int)).keys())
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Generate first num_primes primes (trial division; fast for ≤ 25 primes)
+    primes: list[int] = []
+    cand = 2
+    while len(primes) < num_primes:
+        if all(cand % q != 0 for q in primes):
+            primes.append(cand)
+        cand += 1
+
+    results = []
+    for p in primes:
+        red_type = "bad" if p in bad else "good"
+        A_mod    = A_int % p
+        B_mod    = B_int % p
+        count    = 0   # affine points over 𝔽ₚ
+        for x in range(p):
+            rhs = (pow(x, 3, p) + A_mod * x % p + B_mod) % p
+            if rhs == 0:
+                count += 1
+            elif p == 2:
+                count += 1   # every element is a QR mod 2
+            elif pow(rhs, (p - 1) // 2, p) == 1:
+                count += 2
+        Np = count + 1   # +1 for point at infinity O
+        ap = p + 1 - Np
+        results.append({"p": p, "ap": ap, "Np": Np, "type": red_type})
+
+    # Partial BSD heuristic sum  Σ log(p)/p · log(Nₚ/p)  over good primes ≥ 3
+    bsd_sum = 0.0
+    for r in results:
+        if r["type"] == "good" and r["p"] >= 3:
+            ratio = max(r["Np"] / r["p"], 1e-10)
+            bsd_sum += math.log(r["p"]) / r["p"] * math.log(ratio)
+
+    return {
+        "ok":               True,
+        "traces":           results,
+        "bsd_heuristic":    round(bsd_sum, 4),
+        "A":                ci["A"],
+        "B":                ci["B"],
+        "short_weierstrass": ci.get("short_weierstrass", ""),
     }
 
 

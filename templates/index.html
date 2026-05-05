@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=28" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=29" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -521,6 +521,7 @@
               <button id="btn-export-pdf" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-pdf">&#8595; Export PDF</button>
               <button id="btn-export-latex" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-latex">&#8595; Export LaTeX</button>
               <button id="btn-export-bibtex" class="btn btn-ghost btn-sm" type="button" data-i18n="btn-export-bibtex">&#128196; Cite BibTeX</button>
+              <button id="btn-export-sage" class="btn btn-ghost btn-sm" type="button" title="Download SageMath analysis script">&#x1F9EE; SageMath</button>
             </div>
           </div>
         </div>
@@ -531,8 +532,7 @@
                 <th data-i18n="th-index">#</th>
                 <th data-i18n="th-n">n</th>
                 <th data-i18n="th-x">x</th>
-                <th data-i18n="th-y">y</th>
-                <th id="th-verify" data-i18n="th-verify-ec">Verify (y² = f(n,x))</th>
+                <th data-i18n="th-y">y</th>                <th id="th-height" title="Naive height: log₂(max(|x|,|y|,1)) in bits">h(P) bits</th>                <th id="th-verify" data-i18n="th-verify-ec">Verify (y² = f(n,x))</th>
               </tr>
             </thead>
             <tbody id="results-tbody"></tbody>
@@ -563,6 +563,27 @@
           <pre id="plot-debug" class="plot-debug" style="margin-top:8px;padding:8px;background:#fffbeb;border:1px solid #f6e05e;color:#92400e;display:none;white-space:pre-wrap;font-family:monospace;font-size:13px"></pre>
           <p id="plot-caption" class="plot-caption"></p>
         </div>
+      </div>
+
+      <!-- Group Law Calculator (shown after EC search with solutions) -->
+      <div id="group-law-section" class="group-law-section" style="display:none">
+        <div class="group-law-header">
+          <h3 class="group-law-title">&#x2295; Group Law Calculator</h3>
+          <p class="group-law-hint">Compute P&#x2009;+&#x2009;Q on this elliptic curve using the chord-tangent law (exact rational arithmetic).</p>
+        </div>
+        <div class="group-law-inputs">
+          <div class="gl-point-box">
+            <label class="param-label">Point P</label>
+            <select id="gl-p-select" class="mode-select"></select>
+          </div>
+          <div class="gl-op-badge">&#x2295;</div>
+          <div class="gl-point-box">
+            <label class="param-label">Point Q</label>
+            <select id="gl-q-select" class="mode-select"></select>
+          </div>
+          <button id="btn-compute-gl" class="btn btn-primary btn-sm" type="button">Compute P + Q</button>
+        </div>
+        <div id="gl-result" class="gl-result" style="display:none"></div>
       </div>
 
       <!-- Empty state -->
@@ -674,7 +695,7 @@
     <div id="history-list" class="history-list"></div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=28"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=28"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=29"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=29"></script>
 </body>
 </html>
