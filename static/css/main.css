@@ -150,16 +150,14 @@ code { font-family: var(--font-mono); font-size: .87em;
 }
 .wp-picker-menu {
   display: none;
-  position: absolute;
-  top: calc(100% + 7px);
-  right: 0;
+  position: fixed;
   min-width: 180px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 28px rgba(0,0,0,.28);
+  box-shadow: 0 8px 28px rgba(0,0,0,.35);
   padding: 6px 5px;
-  z-index: 200;
+  z-index: 9999;
 }
 .wp-picker-menu.open { display: block; }
 .wp-picker-label {
