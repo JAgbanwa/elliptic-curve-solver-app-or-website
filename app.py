@@ -100,6 +100,53 @@ def _compute_qr_sieve(f_py_exact, n_val, x_int_arr: np.ndarray,
     return combined
 
 
+# ── Rational-point scan helper ────────────────────────────────────────────────
+def _rational_scan(f_py_exact, n_exact, x_min: int, x_max: int,
+                   x_denom_max: int, n_disp: str, skip_zero_x: bool) -> list[dict]:
+    """
+    Scan x = p/q for denominators q in [2, x_denom_max] and numerators p such
+    that x_min ≤ p/q ≤ x_max.  For each candidate, check whether y² = f(n, x)
+    is a non-negative rational perfect square using exact Fraction arithmetic.
+    Returns a list of {n, x, y} dicts (x and y as fraction strings like "3/2").
+    """
+    from math import isqrt as _isqrt  # noqa: PLC0415
+    from fractions import Fraction as _Frac  # noqa: PLC0415
+    from math import gcd as _gcd  # noqa: PLC0415
+
+    results: list[dict] = []
+
+    for q in range(2, x_denom_max + 1):
+        p_lo = x_min * q
+        p_hi = x_max * q
+        for p in range(p_lo, p_hi + 1):
+            if _gcd(abs(p), q) != 1:
+                continue  # not in lowest terms — skip duplicate
+            if skip_zero_x and p == 0:
+                continue
+            x_frac = _Frac(p, q)
+            try:
+                rhs_raw = f_py_exact(n_exact, x_frac)
+                rhs = _Frac(rhs_raw)
+            except Exception:  # noqa: BLE001
+                continue
+            if rhs < 0:
+                continue
+            # rhs = A/B (lowest terms).  Perfect rational square iff A and B
+            # are both perfect squares.
+            A, B = rhs.numerator, rhs.denominator
+            sqA = _isqrt(A)
+            sqB = _isqrt(B)
+            if sqA * sqA == A and sqB * sqB == B:
+                y_frac = _Frac(sqA, sqB)
+                x_str = str(x_frac) if x_frac.denominator > 1 else str(x_frac.numerator)
+                y_str = str(y_frac) if y_frac.denominator > 1 else str(y_frac.numerator)
+                results.append({"n": n_disp, "x": x_str, "y":  y_str})
+                if y_frac > 0:
+                    neg_str = ("-" + str(y_frac)) if y_frac.denominator > 1 else str(-y_frac.numerator)
+                    results.append({"n": n_disp, "x": x_str, "y": neg_str})
+    return results
+
+
 def parse_expr(raw: str):
     """
     Safely parse *raw* (a Python-syntax math expression in n and x) into a
@@ -506,6 +553,8 @@ def api_search():
         x_step_expr    = request.args.get("x_step_expr",   "1").strip() or "1"
         skip_zero_n = request.args.get("skip_zero_n", "") == "1"
         skip_zero_x = request.args.get("skip_zero_x", "") == "1"
+        point_type  = request.args.get("point_type",  "integer")  # "integer"|"rational"|"all"
+        x_denom_max = max(2, min(50, int(request.args.get("x_denom_max", 12))))
     except (ValueError, TypeError) as exc:
         def _err():
             yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
@@ -970,30 +1019,43 @@ def api_search():
 
             if _use_ec_chunks:
                 # Chunked scan: process x range in _EC_CHUNK blocks to stay within RAM
-                for _cs in range(x_min, x_max + 1, _EC_CHUNK):
-                    _ce = min(_cs + _EC_CHUNK, x_max + 1)
-                    _xi = np.arange(_cs, _ce, dtype=np.int64)
-                    _xa = _xi.astype(np.float64)
-                    _cb = _process_ec_chunk(_xi, _xa)
+                if point_type in ("integer", "all"):
+                    for _cs in range(x_min, x_max + 1, _EC_CHUNK):
+                        _ce = min(_cs + _EC_CHUNK, x_max + 1)
+                        _xi = np.arange(_cs, _ce, dtype=np.int64)
+                        _xa = _xi.astype(np.float64)
+                        _cb = _process_ec_chunk(_xi, _xa)
+                        batch.extend(_cb)
+                        solutions_found += sum(1 for d in _cb if d["y"] >= 0)
+                        # heartbeat + soft-timeout check between chunks
+                        _now = time.monotonic()
+                        if _now - last_hb >= _KEEPALIVE_SEC:
+                            yield _SSE_KEEPALIVE
+                            last_hb = _now
+                        if _now - t_start >= _SOFT_TIMEOUT:
+                            if batch:
+                                n_with_solutions.append(n_disp)
+                                yield sse({"type": "solutions", "data": batch})
+                            yield sse({"type": "done", "total_solutions": solutions_found,
+                                       "n_with_solutions": n_with_solutions,
+                                       "timed_out": True, "timed_out_at_n": n_disp})
+                            return
+            else:
+                if point_type in ("integer", "all"):
+                    _cb = _process_ec_chunk(x_int, x_arr)
                     batch.extend(_cb)
                     solutions_found += sum(1 for d in _cb if d["y"] >= 0)
-                    # heartbeat + soft-timeout check between chunks
-                    _now = time.monotonic()
-                    if _now - last_hb >= _KEEPALIVE_SEC:
-                        yield _SSE_KEEPALIVE
-                        last_hb = _now
-                    if _now - t_start >= _SOFT_TIMEOUT:
-                        if batch:
-                            n_with_solutions.append(n_disp)
-                            yield sse({"type": "solutions", "data": batch})
-                        yield sse({"type": "done", "total_solutions": solutions_found,
-                                   "n_with_solutions": n_with_solutions,
-                                   "timed_out": True, "timed_out_at_n": n_disp})
-                        return
-            else:
-                _cb = _process_ec_chunk(x_int, x_arr)
-                batch.extend(_cb)
-                solutions_found += sum(1 for d in _cb if d["y"] >= 0)
+
+            # ── Rational (non-integer) scan ───────────────────────────────────
+            if (point_type in ("rational", "all")
+                    and f_py_exact is not None
+                    and x_scale == 0):
+                _rb = _rational_scan(
+                    f_py_exact, _n_exact,
+                    x_min, x_max, x_denom_max, n_disp, skip_zero_x,
+                )
+                batch.extend(_rb)
+                solutions_found += sum(1 for d in _rb if not str(d["y"]).startswith("-"))
 
             if batch:
                 n_with_solutions.append(n_disp)

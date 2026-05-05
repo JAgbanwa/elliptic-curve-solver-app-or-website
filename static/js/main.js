@@ -525,11 +525,25 @@ function _passesPointFilter(sol) {
   return currentPointFilter === "integer" ? isInt : !isInt;
 }
 
-/** Sync active state across all .pt-filter-btn elements. */
+/** Sync active state across all .pt-filter-btn elements and update heading. */
 function _syncFilterUI(filter) {
   document.querySelectorAll(".pt-filter-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.filter === filter);
   });
+  // Update the table title to reflect the kind of points being shown
+  const titleEl = document.querySelector(".table-title");
+  if (titleEl) {
+    titleEl.textContent = filter === "rational" ? "\u211a Rational (non-integer) Points Found"
+                        : filter === "all"      ? "All Rational Points Found"
+                        : "\u2124 Integer Points Found";
+  }
+  // Update the plot legend dot label
+  const legendPts = document.querySelector(".plot-legend-points");
+  if (legendPts) {
+    legendPts.textContent = (filter === "rational" ? "\u25cf Rational non-integer points"
+                           : filter === "all"      ? "\u25cf Rational points found"
+                           : "\u25cf Integer points found");
+  }
 }
 
 /** Rebuild the results table from allSolutions respecting currentPointFilter. */
@@ -599,6 +613,7 @@ function buildSearchURL() {
   }
   if (skipZeroNChk.checked) p.set("skip_zero_n", "1");
   if (skipZeroXChk.checked) p.set("skip_zero_x", "1");
+  if (currentPointFilter !== "integer") p.set("point_type", currentPointFilter);
   return "/api/search?" + p.toString();
 }
 
@@ -1576,10 +1591,19 @@ if (btnToggleLabels) {
 document.addEventListener("click", e => {
   const btn = e.target.closest(".pt-filter-btn");
   if (!btn) return;
-  currentPointFilter = btn.dataset.filter || "all";
+  const newFilter = btn.dataset.filter || "all";
+  if (newFilter === currentPointFilter) return;  // no-op
+  currentPointFilter = newFilter;
   _syncFilterUI(currentPointFilter);
-  if (allSolutions.length > 0) _rebuildTable();
-  if (plotData) renderPlot();
+  // If a search has been run, re-run it with the new point_type so the
+  // backend searches for the right kind of solutions.
+  if (searchMeta && searchMeta.startedAt) {
+    startSearch();
+  } else if (allSolutions.length > 0) {
+    // Fallback: just re-filter what we already have client-side
+    _rebuildTable();
+    if (plotData) renderPlot();
+  }
 });
 
 // Re-render on window resize
