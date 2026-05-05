@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=35" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=36" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -40,6 +40,8 @@
           crossorigin="anonymous"></script>
 </head>
 <body>
+  <!-- ─── BACKGROUND WALLPAPER ────────────────────────────────────────────── -->
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
   <!-- ─── HEADER ──────────────────────────────────────────────────────────── -->
   <header class="site-header">
     <div class="header-inner">
@@ -703,7 +705,145 @@
     <div id="history-list" class="history-list"></div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=35"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=35"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=36"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=36"></script>
+
+  <!-- ─── BACKGROUND WALLPAPER ──────────────────────────────────────────────
+       Draws slowly drifting elliptic curve arcs (y² = x³ + ax + b families)
+       behind the entire page.  Pure canvas 2D — no libraries, no images.
+  ─────────────────────────────────────────────────────────────────────────── -->
+  <script>
+  (function () {
+    "use strict";
+    const canvas = document.getElementById("bg-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    // ── Curve parameters ────────────────────────────────────────────────────
+    // Each "strand" is a slow-moving elliptic curve branch y² = x³ + a·x + b
+    // We draw the positive branch only for a clean, uncluttered look.
+    const N_CURVES = 7;
+    const strands = [];
+    const SEED_PARAMS = [
+      { a: -1,   b:  1,   dx: 0.018,  dy: 0.011, phase: 0.00 },
+      { a: -2.5, b:  2,   dx: -0.012, dy: 0.008, phase: 1.10 },
+      { a:  0,   b: -1,   dx: 0.009,  dy: -0.014, phase: 2.40 },
+      { a: -3,   b:  4,   dx: -0.016, dy: 0.006, phase: 0.80 },
+      { a:  1,   b: -2,   dx: 0.011,  dy: 0.013, phase: 3.60 },
+      { a: -1.5, b:  0.5, dx: -0.007, dy: -0.009, phase: 1.80 },
+      { a:  0.5, b:  1.5, dx: 0.014,  dy: -0.010, phase: 4.20 },
+    ];
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width  = window.innerWidth  * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width  = window.innerWidth  + "px";
+      canvas.style.height = window.innerHeight + "px";
+      ctx.scale(dpr, dpr);
+    }
+    resize();
+    window.addEventListener("resize", () => { ctx.setTransform(1,0,0,1,0,0); resize(); });
+
+    // Initialise strand state
+    for (let i = 0; i < N_CURVES; i++) {
+      const p = SEED_PARAMS[i % SEED_PARAMS.length];
+      strands.push({
+        a: p.a, b: p.b,
+        // Normalised offset: the curve window drifts slowly across the canvas
+        ox: Math.random(),   // 0..1 of canvas width
+        oy: 0.15 + Math.random() * 0.70,  // 0.15..0.85 of canvas height
+        dx: p.dx * (0.7 + Math.random() * 0.6),
+        dy: p.dy * (0.7 + Math.random() * 0.6),
+        phase: p.phase,
+        // How much of the canvas width a single "plot window" covers
+        scale: 0.22 + Math.random() * 0.28,  // 0.22..0.50 of canvas width
+      });
+    }
+
+    let t = 0;
+
+    function isDark() {
+      return document.documentElement.getAttribute("data-theme") !== "light";
+    }
+
+    function draw() {
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      ctx.clearRect(0, 0, W, H);
+
+      const dark = isDark();
+      // Stroke colours: very faint accent tones
+      const colors = dark
+        ? ["rgba(163,113,247,0.055)", "rgba(88,166,255,0.045)", "rgba(63,185,80,0.038)"]
+        : ["rgba(130,80,223,0.060)",  "rgba(9,105,218,0.050)",  "rgba(26,127,55,0.042)"];
+
+      for (let i = 0; i < strands.length; i++) {
+        const s = strands[i];
+
+        // Drift
+        s.ox += s.dx * 0.001;
+        s.oy += s.dy * 0.001;
+        // Wrap gently so curves re-enter from the opposite edge
+        if (s.ox > 1.15) s.ox = -0.15;
+        if (s.ox < -0.15) s.ox = 1.15;
+        if (s.oy > 0.92) s.dy = -Math.abs(s.dy);
+        if (s.oy < 0.08) s.dy =  Math.abs(s.dy);
+
+        // Slowly morph a and b to keep curves interesting without jarring change
+        s.a += Math.sin(t * 0.00031 + s.phase) * 0.0004;
+        s.b += Math.cos(t * 0.00027 + s.phase) * 0.0003;
+
+        // Canvas coordinates of the plot origin
+        const cx = s.ox * W;
+        const cy = s.oy * H;
+        const pw = s.scale * W;   // plot window width in pixels
+        const ph = pw * 0.45;     // aspect ~2.2:1
+
+        // Map x from plot-space [-3, 3] to pixel
+        const X_LO = -3.2, X_HI = 3.2;
+        const xToPx = x => cx - pw / 2 + (x - X_LO) / (X_HI - X_LO) * pw;
+        const yToPx = y => cy + ph / 2 - y * (ph / 3.6);
+
+        // Draw positive branch of y² = x³ + a·x + b
+        const STEPS = 180;
+        const dx_step = (X_HI - X_LO) / STEPS;
+
+        ctx.beginPath();
+        let started = false;
+        for (let k = 0; k <= STEPS; k++) {
+          const x = X_LO + k * dx_step;
+          const rhs = x * x * x + s.a * x + s.b;
+          if (rhs < 0) { started = false; continue; }
+          const y =  Math.sqrt(rhs);
+          const px = xToPx(x), py = yToPx(y);
+          if (!started) { ctx.moveTo(px, py); started = true; }
+          else ctx.lineTo(px, py);
+        }
+        // Negative branch (mirror)
+        for (let k = STEPS; k >= 0; k--) {
+          const x = X_LO + k * dx_step;
+          const rhs = x * x * x + s.a * x + s.b;
+          if (rhs < 0) { started = false; continue; }
+          const y = -Math.sqrt(rhs);
+          const px = xToPx(x), py = yToPx(y);
+          if (!started) { ctx.moveTo(px, py); started = true; }
+          else ctx.lineTo(px, py);
+        }
+
+        ctx.strokeStyle = colors[i % colors.length];
+        ctx.lineWidth   = 1.2;
+        ctx.lineJoin    = "round";
+        ctx.lineCap     = "round";
+        ctx.stroke();
+      }
+
+      t++;
+      requestAnimationFrame(draw);
+    }
+
+    requestAnimationFrame(draw);
+  })();
+  </script>
 </body>
 </html>
