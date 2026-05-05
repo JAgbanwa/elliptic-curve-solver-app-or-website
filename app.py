@@ -16,9 +16,7 @@ import re
 import math
 import json
 import time
-import sqlite3
 import os
-import secrets
 
 import numpy as np
 
@@ -29,63 +27,13 @@ except ImportError:
     _mpmath = None  # type: ignore[assignment]
     _MPMATH = False
 
-from flask import Flask, render_template, request, Response, stream_with_context, jsonify, session
+from flask import Flask, render_template, request, Response, stream_with_context
 from sympy import symbols, sympify, lambdify, latex as sym_latex
 from sympy.core.sympify import SympifyError
 
 app = Flask(__name__)
 # Disable static-file caching so browsers always fetch the latest CSS/JS
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
-
-# ── SQLite database ────────────────────────────────────────────────────────────
-_DB_PATH = os.path.join(os.path.dirname(__file__), "users.db")
-
-def _get_db():
-    db = sqlite3.connect(_DB_PATH)
-    db.row_factory = sqlite3.Row
-    return db
-
-def _init_db():
-    db = _get_db()
-    db.executescript("""
-        CREATE TABLE IF NOT EXISTS users (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            username      TEXT UNIQUE NOT NULL,
-            email         TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at    TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS saved_searches (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            title      TEXT NOT NULL,
-            params     TEXT NOT NULL,
-            result_count INTEGER DEFAULT 0,
-            saved_at   TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-    """)
-    db.commit()
-    db.close()
-
-_init_db()
-
-def _hash_pw(pw: str) -> str:
-    from werkzeug.security import generate_password_hash
-    return generate_password_hash(pw, method="pbkdf2:sha256")
-
-def _check_pw(pw: str, h: str) -> bool:
-    from werkzeug.security import check_password_hash
-    return check_password_hash(h, pw)
-
-def _current_user():
-    uid = session.get("user_id")
-    if not uid:
-        return None
-    db = _get_db()
-    row = db.execute("SELECT id, username, email FROM users WHERE id=?", (uid,)).fetchone()
-    db.close()
-    return dict(row) if row else None
 
 n_sym, x_sym, y_sym = symbols("n x y")
 
@@ -487,116 +435,6 @@ def _curve_info(expr, n_val) -> dict:  # noqa: C901
 @app.route("/")
 def index():
     return render_template("index.html")
-
-
-# ── Auth routes ────────────────────────────────────────────────────────────────
-
-@app.route("/api/auth/register", methods=["POST"])
-def auth_register():
-    data = request.get_json(silent=True) or {}
-    username = str(data.get("username", "")).strip()[:40]
-    email    = str(data.get("email",    "")).strip()[:120]
-    password = str(data.get("password", ""))
-    if not username or not email or not password:
-        return jsonify({"ok": False, "error": "All fields are required."}), 400
-    if len(password) < 8:
-        return jsonify({"ok": False, "error": "Password must be at least 8 characters."}), 400
-    import re as _re
-    if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-        return jsonify({"ok": False, "error": "Invalid email address."}), 400
-    try:
-        db = _get_db()
-        db.execute(
-            "INSERT INTO users (username, email, password_hash) VALUES (?,?,?)",
-            (username, email, _hash_pw(password))
-        )
-        db.commit()
-        row = db.execute("SELECT id, username, email FROM users WHERE username=?", (username,)).fetchone()
-        db.close()
-        session["user_id"] = row["id"]
-        return jsonify({"ok": True, "user": {"id": row["id"], "username": row["username"], "email": row["email"]}})
-    except sqlite3.IntegrityError:
-        return jsonify({"ok": False, "error": "Username or email already taken."}), 409
-    except Exception as e:
-        return jsonify({"ok": False, "error": "Registration failed."}), 500
-
-
-@app.route("/api/auth/login", methods=["POST"])
-def auth_login():
-    data = request.get_json(silent=True) or {}
-    username = str(data.get("username", "")).strip()
-    password = str(data.get("password", ""))
-    if not username or not password:
-        return jsonify({"ok": False, "error": "Username and password required."}), 400
-    db = _get_db()
-    row = db.execute("SELECT id, username, email, password_hash FROM users WHERE username=?", (username,)).fetchone()
-    db.close()
-    if not row or not _check_pw(password, row["password_hash"]):
-        return jsonify({"ok": False, "error": "Invalid username or password."}), 401
-    session["user_id"] = row["id"]
-    return jsonify({"ok": True, "user": {"id": row["id"], "username": row["username"], "email": row["email"]}})
-
-
-@app.route("/api/auth/logout", methods=["POST"])
-def auth_logout():
-    session.clear()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/auth/me")
-def auth_me():
-    user = _current_user()
-    if not user:
-        return jsonify({"ok": False, "user": None})
-    return jsonify({"ok": True, "user": user})
-
-
-# ── Saved searches ─────────────────────────────────────────────────────────────
-
-@app.route("/api/searches", methods=["GET"])
-def get_searches():
-    user = _current_user()
-    if not user:
-        return jsonify({"ok": False, "error": "Not logged in."}), 401
-    db = _get_db()
-    rows = db.execute(
-        "SELECT id, title, params, result_count, saved_at FROM saved_searches WHERE user_id=? ORDER BY saved_at DESC LIMIT 100",
-        (user["id"],)
-    ).fetchall()
-    db.close()
-    return jsonify({"ok": True, "searches": [dict(r) for r in rows]})
-
-
-@app.route("/api/searches", methods=["POST"])
-def save_search():
-    user = _current_user()
-    if not user:
-        return jsonify({"ok": False, "error": "Not logged in."}), 401
-    data = request.get_json(silent=True) or {}
-    title  = str(data.get("title", "Untitled"))[:120]
-    params = json.dumps(data.get("params", {}))
-    result_count = int(data.get("result_count", 0))
-    db = _get_db()
-    cur = db.execute(
-        "INSERT INTO saved_searches (user_id, title, params, result_count) VALUES (?,?,?,?)",
-        (user["id"], title, params, result_count)
-    )
-    db.commit()
-    row = db.execute("SELECT id, title, params, result_count, saved_at FROM saved_searches WHERE id=?", (cur.lastrowid,)).fetchone()
-    db.close()
-    return jsonify({"ok": True, "search": dict(row)})
-
-
-@app.route("/api/searches/<int:search_id>", methods=["DELETE"])
-def delete_search(search_id: int):
-    user = _current_user()
-    if not user:
-        return jsonify({"ok": False, "error": "Not logged in."}), 401
-    db = _get_db()
-    db.execute("DELETE FROM saved_searches WHERE id=? AND user_id=?", (search_id, user["id"]))
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
 
 
 @app.route("/api/latex", methods=["POST"])
