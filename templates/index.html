@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=36" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=37" />
   <!-- Prevent theme flash: apply saved/preferred theme before first paint -->
   <script>
     (function(){
@@ -705,8 +705,8 @@
     <div id="history-list" class="history-list"></div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=36"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=36"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=37"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=37"></script>
 
   <!-- ─── BACKGROUND WALLPAPER ──────────────────────────────────────────────
        Draws slowly drifting elliptic curve arcs (y² = x³ + ax + b families)
@@ -775,8 +775,8 @@
       const dark = isDark();
       // Stroke colours: very faint accent tones
       const colors = dark
-        ? ["rgba(163,113,247,0.055)", "rgba(88,166,255,0.045)", "rgba(63,185,80,0.038)"]
-        : ["rgba(130,80,223,0.060)",  "rgba(9,105,218,0.050)",  "rgba(26,127,55,0.042)"];
+        ? ["rgba(163,113,247,0.13)", "rgba(88,166,255,0.10)", "rgba(63,185,80,0.09)"]
+        : ["rgba(130,80,223,0.11)",  "rgba(9,105,218,0.09)",  "rgba(26,127,55,0.08)"];
 
       for (let i = 0; i < strands.length; i++) {
         const s = strands[i];
@@ -832,7 +832,7 @@
         }
 
         ctx.strokeStyle = colors[i % colors.length];
-        ctx.lineWidth   = 1.2;
+        ctx.lineWidth   = 1.6;
         ctx.lineJoin    = "round";
         ctx.lineCap     = "round";
         ctx.stroke();
