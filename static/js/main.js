@@ -1105,35 +1105,12 @@ async function loadPlot() {
   else        { body.expr = exprInput.value.trim(); }
 
   try {
-    // Debug: show request body in UI and console
-    try {
-      const dbgEl = document.getElementById("plot-debug");
-      if (dbgEl) { dbgEl.style.display = "block"; dbgEl.textContent = "Sending to /api/plot:\n" + JSON.stringify(body, null, 2); }
-    } catch (_) {}
-    console.log("/api/plot request:", body);
     const resp = await fetch("/api/plot", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify(body),
     });
     const data = await resp.json();
-    // Debug: update UI with response summary
-    try {
-      const dbgEl = document.getElementById("plot-debug");
-      if (dbgEl) {
-        const respSummary = {
-          ok: data.ok,
-          pos_segments: (data.pos_segments || []).length,
-          neg_segments: (data.neg_segments || []).length,
-          sol_points: (data.sol_points || []).length,
-          x_min: data.x_min, x_max: data.x_max, y_min: data.y_min, y_max: data.y_max,
-        };
-        dbgEl.textContent = "Sent:\n" + JSON.stringify(body, null, 2)
-                         + "\n\nResponse:\n" + JSON.stringify(respSummary, null, 2)
-                         + "\n\nFirst sol_points:\n" + JSON.stringify((data.sol_points || []).slice(0,10), null, 2);
-      }
-    } catch (_) {}
-    console.log("/api/plot response:", data);
     if (data.ok) {
       // Don't open an empty panel — nothing useful to render
       const hasAnything = data.pos_segments.length > 0
