@@ -1054,23 +1054,30 @@ ${tableRows}
   }
 
   function exportPDF() {
-    const meta    = searchMetaRef.current;
-    const eq      = meta.equation || `y² = ${expr.trim()}`;
-    const date    = new Date().toLocaleDateString("en-GB", {day:"2-digit", month:"long", year:"numeric"});
-    const graphImg = canvasRef.current ? canvasRef.current.toDataURL("image/png") : null;
+    try {
+      const meta    = searchMetaRef.current;
+      const eq      = meta.equation || `y² = ${expr.trim()}`;
+      const date    = new Date().toLocaleDateString("en-GB", {day:"2-digit", month:"long", year:"numeric"});
 
-    const tableRows = filteredSols.map((s, i) =>
-      `<tr><td>${i+1}</td><td>${escHtml(s.n)}</td><td>${escHtml(s.x)}</td><td>${escHtml(s.y)}</td></tr>`
-    ).join("\n");
+      // Guard against tainted-canvas SecurityError
+      let graphImg: string | null = null;
+      try {
+        if (canvasRef.current) graphImg = canvasRef.current.toDataURL("image/png");
+      } catch { graphImg = null; }
 
-    const graphSection = graphImg
-      ? `<section class="graph-section">
-           <h2>Graph (n = ${escHtml(plotN)})</h2>
-           <img src="${graphImg}" alt="Elliptic curve graph" />
-         </section>`
-      : "";
+      const sols = filteredSols;
+      const tableRows = sols.map((s, i) =>
+        `<tr><td>${i+1}</td><td>${escHtml(String(s.n))}</td><td>${escHtml(String(s.x))}</td><td>${escHtml(String(s.y))}</td></tr>`
+      ).join("\n");
 
-    const html = `<!DOCTYPE html>
+      const graphSection = graphImg
+        ? `<section class="graph-section">
+             <h2>Graph (n = ${escHtml(String(plotN))})</h2>
+             <img src="${graphImg}" alt="Elliptic curve graph" />
+           </section>`
+        : "";
+
+      const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -1106,12 +1113,12 @@ ${tableRows}
   <table class="params">
     <tr><td>n range</td><td>[${escHtml(String(meta.nMin ?? "?"))}, ${escHtml(String(meta.nMax ?? "?"))}]</td></tr>
     <tr><td>x range</td><td>[${escHtml(String(meta.xMin ?? "?"))}, ${escHtml(String(meta.xMax ?? "?"))}]</td></tr>
-    <tr><td>Solutions found</td><td>${filteredSols.length}</td></tr>
+    <tr><td>Solutions found</td><td>${sols.length}</td></tr>
   </table>
 
   ${graphSection}
 
-  <h2>Solutions (${filteredSols.length})</h2>
+  <h2>Solutions (${sols.length})</h2>
   <table>
     <thead><tr><th>#</th><th>n</th><th>x</th><th>y</th></tr></thead>
     <tbody>
@@ -1123,13 +1130,16 @@ ${tableRows}
 </body>
 </html>`;
 
-    const win = window.open("", "_blank", "width=900,height=700");
-    if (!win) { showToast("Allow pop-ups to export PDF"); return; }
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    // Small delay so the image loads before the print dialog opens
-    setTimeout(() => { win.print(); }, 500);
+      const win = window.open("", "_blank", "width=900,height=700");
+      if (!win) { showToast("Allow pop-ups to export PDF"); return; }
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      // Small delay so the image loads before the print dialog opens
+      setTimeout(() => { win.print(); }, 500);
+    } catch (err) {
+      showToast("PDF export failed: " + (err instanceof Error ? err.message : String(err)));
+    }
   }
 
   function exportBibTeX() {
