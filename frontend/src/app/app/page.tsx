@@ -116,7 +116,7 @@ const CoffeeIcon = () => (
 );
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
-interface Solution { n: string; x: string; y: string; }
+interface Solution { n: string | number; x: string | number; y: string | number; }
 interface HistoryItem {
   id: string; equation: string; nMin: string; nMax: string; nDenom: string;
   xMode: string; xMin: string; xMax: string; pinned: boolean;
@@ -1165,7 +1165,7 @@ ${tableRows}
   /* ── Filtered solutions ──────────────────────────────────────────────── */
   const filteredSols = solutions.filter(s => {
     if (pointFilter === "all") return true;
-    const isInt = (v: string) => !v.includes("/") && Number.isFinite(Number(v)) && Number.isInteger(Number(v));
+    const isInt = (v: string | number) => { const vs = String(v); return !vs.includes("/") && Number.isFinite(Number(vs)) && Number.isInteger(Number(vs)); };
     const ii = isInt(s.x) && isInt(s.y);
     return pointFilter === "integer" ? ii : !ii;
   });
