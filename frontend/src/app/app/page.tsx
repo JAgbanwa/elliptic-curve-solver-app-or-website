@@ -314,7 +314,17 @@ export default function SolverPage() {
   const showLabelsRef = useRef(true);
   const filterRef     = useRef<"all"|"integer"|"rational">("all");
 
-  /* ── Keep refs in sync ────────────────────────────────────────────────── */
+  /* ── Apply font preference to entire page ────────────────────────────── */
+  useEffect(() => {
+    const font = FONT_OPTIONS.find(f => f.id === fontId);
+    const size = FONT_SIZES.find(s => s.id === fontSizeId);
+    if (font) document.body.style.fontFamily = font.stack;
+    if (size) document.body.style.fontSize   = size.px;
+    return () => {
+      document.body.style.fontFamily = "";
+      document.body.style.fontSize   = "";
+    };
+  }, [fontId, fontSizeId]);
   useEffect(() => { viewportRef.current = viewport; }, [viewport]);
   useEffect(() => { plotDataRef.current = plotData; }, [plotData]);
   useEffect(() => { showLabelsRef.current = showLabels; }, [showLabels]);
@@ -1163,11 +1173,7 @@ export default function SolverPage() {
       )}
 
       {/* ── Main App ── */}
-      <main className="main-grid above-canvas" id="app"
-        style={{
-          fontFamily: FONT_OPTIONS.find(f => f.id === fontId)?.stack,
-          fontSize:   FONT_SIZES.find(s => s.id === fontSizeId)?.px,
-        }}>
+      <main className="main-grid above-canvas" id="app">
 
         {/* ─── Left panel: inputs ─────────────────────────────────────────── */}
         <aside className="panel">
