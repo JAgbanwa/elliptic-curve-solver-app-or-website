@@ -219,7 +219,7 @@ function fmtNum(v: number) {
   if (Number.isInteger(v)) return v.toString();
   return v.toFixed(1);
 }
-function computeHeight(x: string, y: string): string {
+function computeHeight(x: string | number, y: string | number): string { x = String(x); y = String(y);
   try {
     const bx = BigInt(x.replace(/^-/, "").split("/")[0]);
     const by = BigInt(y.replace(/^-/, "").split("/")[0]);
@@ -778,7 +778,7 @@ export default function SolverPage() {
     const isGen = searchMetaRef.current.mode === "gen";
     let xMinP = isGen ? parseFloat(searchMetaRef.current.genXMin||"-50")||(-50) : parseFloat(searchMetaRef.current.xMin||"-1000")||(-1000);
     let xMaxP = isGen ? parseFloat(searchMetaRef.current.genXMax||"50")||(50) : parseFloat(searchMetaRef.current.xMax||"1000")||(1000);
-    const solXs = sols.map(s => parseFloat(s.x)).filter(Number.isFinite);
+    const solXs = sols.map(s => parseFloat(String(s.x))).filter(Number.isFinite);
     if (solXs.length) {
       const lo = Math.min(...solXs), hi = Math.max(...solXs);
       const pad = Math.max(5, (hi-lo)*0.15);
@@ -874,7 +874,7 @@ export default function SolverPage() {
     for (const seg of pos_segments) drawSeg(seg);
     for (const seg of neg_segments) drawSeg(seg);
 
-    const isInt = (v: string) => !v.includes("/") && Number.isFinite(Number(v)) && Number.isInteger(Number(v));
+    const isInt = (v: string | number) => { const vs = String(v); return !vs.includes("/") && Number.isFinite(Number(vs)) && Number.isInteger(Number(vs)); };
     const f = filterRef.current;
     const visSols = plotSolsRef.current.filter(s => {
       if (f === "all") return true;
@@ -882,7 +882,7 @@ export default function SolverPage() {
       return f === "integer" ? ii : !ii;
     });
     for (const { x, y } of visSols) {
-      const fx = parseFloat(x), fy = parseFloat(y);
+      const fx = parseFloat(String(x)), fy = parseFloat(String(y));
       if (!Number.isFinite(fx) || !Number.isFinite(fy)) continue;
       const px = tx(fx), py = ty(fy);
       ctx.fillStyle = "#ef4444"; ctx.strokeStyle = darkMode ? "#161b22" : "#fff"; ctx.lineWidth = 2;
@@ -1185,7 +1185,7 @@ ${tableRows}
           <td>{sol.n}</td>
           <td>{sol.x}</td>
           <td>{sol.y}</td>
-          <td className="cell-height">{computeHeight(sol.x, sol.y)}</td>
+          <td className="cell-height">{computeHeight(String(sol.x), String(sol.y))}</td>
           <td className="cell-valid"><CheckIcon /> verified</td>
         </tr>
       );
