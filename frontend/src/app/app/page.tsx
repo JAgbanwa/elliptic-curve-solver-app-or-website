@@ -318,11 +318,19 @@ export default function SolverPage() {
   useEffect(() => {
     const font = FONT_OPTIONS.find(f => f.id === fontId);
     const size = FONT_SIZES.find(s => s.id === fontSizeId);
-    if (font) document.body.style.fontFamily = font.stack;
-    if (size) document.body.style.fontSize   = size.px;
+    const html = document.documentElement;
+    // rem units are relative to <html> font-size — must set here, not body
+    if (size) html.style.fontSize = size.px;
+    // Every element uses var(--font-mono) or var(--font-sans) explicitly,
+    // so override both CSS variables so they all pick up the chosen font
+    if (font) {
+      html.style.setProperty("--font-mono", font.stack);
+      html.style.setProperty("--font-sans", font.stack);
+    }
     return () => {
-      document.body.style.fontFamily = "";
-      document.body.style.fontSize   = "";
+      html.style.fontSize = "";
+      html.style.removeProperty("--font-mono");
+      html.style.removeProperty("--font-sans");
     };
   }, [fontId, fontSizeId]);
   useEffect(() => { viewportRef.current = viewport; }, [viewport]);
