@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elliptic Curve Solver</title>
+  <meta name="description" content="Search for integer points on parametric elliptic curve families. Define any y² = f(n, x), set your range, stream results in real time." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --black: #000;
+      --white: #fff;
+      --mid:   #111;
+      --dim:   #555;
+      --rule:  #222;
+      --mono:  "Courier New", Courier, monospace;
+      --serif: Georgia, "Times New Roman", serif;
+      --sans:  "Helvetica Neue", Arial, Helvetica, sans-serif;
+    }
+
+    html { font-size: 16px; scroll-behavior: smooth; }
+
+    body {
+      background: var(--black);
+      color: var(--white);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ─────────────────────────────────────────────────────────── */
+    header {
+      border-bottom: 1px solid var(--rule);
+      padding: 22px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-family: var(--mono);
+      font-size: 1rem;
+      letter-spacing: .08em;
+      color: var(--white);
+      text-decoration: none;
+    }
+    .logo span { color: var(--dim); }
+    nav { display: flex; gap: 32px; align-items: center; }
+    nav a {
+      font-size: .85rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--dim);
+      text-decoration: none;
+      transition: color .15s;
+    }
+    nav a:hover { color: var(--white); }
+
+    /* ── HERO ───────────────────────────────────────────────────────────── */
+    .hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 100px 40px 80px;
+      max-width: 900px;
+      width: 100%;
+    }
+    .hero-overline {
+      font-family: var(--mono);
+      font-size: .78rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .hero-overline::before {
+      content: "";
+      display: inline-block;
+      width: 32px;
+      height: 1px;
+      background: var(--dim);
+    }
+    h1 {
+      font-family: var(--serif);
+      font-size: clamp(2.4rem, 6vw, 4.8rem);
+      font-weight: 400;
+      line-height: 1.08;
+      letter-spacing: -.02em;
+      color: var(--white);
+      margin-bottom: 40px;
+    }
+    h1 em {
+      font-style: italic;
+      color: var(--dim);
+    }
+    .hero-eq {
+      display: block;
+      font-family: var(--mono);
+      font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+      letter-spacing: .04em;
+      color: var(--dim);
+      margin-bottom: 48px;
+      border-left: 2px solid var(--dim);
+      padding-left: 20px;
+    }
+    .hero-body {
+      font-size: 1.05rem;
+      line-height: 1.75;
+      color: #aaa;
+      max-width: 580px;
+      margin-bottom: 56px;
+    }
+    .hero-body strong { color: var(--white); font-weight: 600; }
+
+    /* ── CTA ────────────────────────────────────────────────────────────── */
+    .cta-group { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .btn-cta {
+      display: inline-block;
+      background: var(--white);
+      color: var(--black);
+      font-family: var(--sans);
+      font-size: .9rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      text-decoration: none;
+      padding: 16px 40px;
+      border: 1px solid var(--white);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .btn-cta:hover { background: var(--black); color: var(--white); }
+    .btn-ghost-cta {
+      font-size: .82rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--dim);
+      text-decoration: none;
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 2px;
+      transition: color .15s, border-color .15s;
+    }
+    .btn-ghost-cta:hover { color: var(--white); border-color: var(--dim); }
+
+    /* ── PROBLEM STRIP ──────────────────────────────────────────────────── */
+    .problem-strip {
+      border-top: 1px solid var(--rule);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .problem-cell {
+      padding: 48px 40px;
+      border-right: 1px solid var(--rule);
+    }
+    .problem-cell:last-child { border-right: 0; }
+    .problem-num {
+      font-family: var(--mono);
+      font-size: .7rem;
+      letter-spacing: .18em;
+      color: var(--dim);
+      margin-bottom: 18px;
+    }
+    .problem-title {
+      font-family: var(--serif);
+      font-size: 1.15rem;
+      font-weight: 400;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+    .problem-body {
+      font-size: .85rem;
+      line-height: 1.65;
+      color: #888;
+    }
+
+    /* ── HOW IT WORKS ───────────────────────────────────────────────────── */
+    .how {
+      border-top: 1px solid var(--rule);
+      padding: 80px 40px;
+      max-width: 900px;
+    }
+    .section-label {
+      font-family: var(--mono);
+      font-size: .72rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 48px;
+    }
+    .steps { display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 0 28px;
+      align-items: start;
+      padding: 32px 0;
+      border-bottom: 1px solid var(--rule);
+    }
+    .step:last-child { border-bottom: 0; }
+    .step-num {
+      font-family: var(--mono);
+      font-size: .72rem;
+      letter-spacing: .1em;
+      color: var(--dim);
+      padding-top: 4px;
+    }
+    .step-title {
+      font-family: var(--serif);
+      font-size: 1.05rem;
+      font-weight: 400;
+      margin-bottom: 6px;
+    }
+    .step-body { font-size: .85rem; line-height: 1.65; color: #888; }
+    .step-body code {
+      font-family: var(--mono);
+      font-size: .82em;
+      color: #bbb;
+      background: #111;
+      padding: 1px 5px;
+    }
+
+    /* ── FOOTER ─────────────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--rule);
+      padding: 28px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .footer-copy {
+      font-family: var(--mono);
+      font-size: .72rem;
+      letter-spacing: .06em;
+      color: var(--dim);
+    }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a {
+      font-size: .78rem;
+      letter-spacing: .04em;
+      color: var(--dim);
+      text-decoration: none;
+      transition: color .15s;
+    }
+    .footer-links a:hover { color: var(--white); }
+
+    /* ── RESPONSIVE ─────────────────────────────────────────────────────── */
+    @media (max-width: 700px) {
+      header { padding: 18px 20px; }
+      nav { gap: 18px; }
+      .hero { padding: 64px 20px 56px; }
+      .problem-strip { grid-template-columns: 1fr; }
+      .problem-cell { border-right: 0; border-bottom: 1px solid var(--rule); }
+      .how { padding: 56px 20px; }
+      footer { padding: 22px 20px; flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <a class="logo" href="/">∮ <span>Elliptic Curve Solver</span></a>
+    <nav>
+      <a href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">GitHub</a>
+      <a href="/app">Open App</a>
+    </nav>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <p class="hero-overline">Number Theory &nbsp;·&nbsp; Research Tool</p>
+    <h1>
+      Which integers&nbsp;<em>n</em><br>
+      make this curve solvable?
+    </h1>
+    <span class="hero-eq">y² = f(n, x) &nbsp;— &nbsp;find all integer (n, x, y)</span>
+    <p class="hero-body">
+      The <strong>congruent number problem</strong>, Mordell curves, BSD conjecture —
+      all reduce to asking when a parametric elliptic curve has integer points.
+      This tool lets you define any such family, set your search range, and stream
+      every solution directly to your browser in real time.
+      <br><br>
+      No installation. No account. Powered by <strong>NumPy, SymPy, and Server-Sent Events</strong>.
+    </p>
+    <div class="cta-group">
+      <a class="btn-cta" href="/app">Open the solver</a>
+      <a class="btn-ghost-cta" href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">View source on GitHub</a>
+    </div>
+  </section>
+
+  <!-- PROBLEM STRIP -->
+  <div class="problem-strip">
+    <div class="problem-cell">
+      <div class="problem-num">01 / THE PROBLEM</div>
+      <div class="problem-title">Searching for integer points is computationally expensive</div>
+      <p class="problem-body">
+        Naively testing every (n, x) pair over large ranges takes seconds per curve
+        and is hard to parallelize on a laptop.
+      </p>
+    </div>
+    <div class="problem-cell">
+      <div class="problem-num">02 / THE APPROACH</div>
+      <div class="problem-title">Vectorised NumPy evaluation, streamed via SSE</div>
+      <p class="problem-body">
+        The right-hand side is compiled once by SymPy, then evaluated over entire
+        x-vectors in a single NumPy call per n — 100M+ evaluations per search.
+      </p>
+    </div>
+    <div class="problem-cell">
+      <div class="problem-num">03 / THE RESULT</div>
+      <div class="problem-title">Every integer triple (n, x, y) appears the moment it is found</div>
+      <p class="problem-body">
+        Solutions stream to your browser live. LaTeX export, CSV download, and
+        shareable URLs are included at no cost.
+      </p>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <section class="how">
+    <p class="section-label">How it works</p>
+    <div class="steps">
+      <div class="step">
+        <span class="step-num">01</span>
+        <div>
+          <div class="step-title">Define your curve</div>
+          <p class="step-body">Enter any expression <code>f(n, x)</code> as the right-hand side of y² = …
+          The tool supports polynomials, rational functions, and nested expressions.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-num">02</span>
+        <div>
+          <div class="step-title">Set your search bounds</div>
+          <p class="step-body">Choose integer (or rational) ranges for n and x.
+          Autoscale, fixed window, divisor-based, and expression-range x-modes are available.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-num">03</span>
+        <div>
+          <div class="step-title">Stream results in real time</div>
+          <p class="step-body">A Server-Sent Events connection streams each triple <code>(n, x, y)</code>
+          the instant it is discovered — no polling, no waiting for the full search to finish.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-num">04</span>
+        <div>
+          <div class="step-title">Export, share, and pin</div>
+          <p class="step-body">Download as CSV or BibTeX, copy a shareable URL that encodes your exact search,
+          or pin searches to your local history for later recall.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <span class="footer-copy">© 2026 &nbsp;Elliptic Curve Solver &nbsp;— &nbsp;open source</span>
+    <div class="footer-links">
+      <a href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener">GitHub</a>
+      <a href="/app">Open App</a>
+    </div>
+  </footer>
+
+</body>
+</html>
