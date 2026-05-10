@@ -555,6 +555,7 @@ export default function SolverPage() {
     else { p.set("x_min", xMin); p.set("x_max", xMax); }
     if (skipZeroN) p.set("skip_zero_n", "1");
     if (skipZeroX) p.set("skip_zero_x", "1");
+    p.set("point_type", "all"); // fetch both integer and rational; frontend filter splits them
     return "/api/search?" + p.toString();
   }
 
