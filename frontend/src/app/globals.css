@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* ── CSS Design Tokens — editorial B&W, light-first ─────────────────────── */
+:root {
+  /* LIGHT (default) */
+  --bg:          #ffffff;
+  --surface:     #fafafa;
+  --surface2:    #f2f2f2;
+  --border:      #e0e0e0;
+  --accent:      #000000;
+  --accent-glow: rgba(0,0,0,.04);
+  --accent2:     #555555;
+  --green:       #166534;
+  --red:         #991b1b;
+  --amber:       #92400e;
+  --text:        #000000;
+  --text-dim:    #666666;
+  --radius:      0px;
+  --radius-sm:   0px;
+  --shadow:      0 1px 4px rgba(0,0,0,.10);
+  --font-mono:   "Courier New", Courier, monospace;
+  --font-serif:  Georgia, "Times New Roman", serif;
+  --font-sans:   "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+html[data-theme="dark"] {
+  --bg:          #0a0a0a;
+  --surface:     #141414;
+  --surface2:    #1e1e1e;
+  --border:      #2a2a2a;
+  --accent:      #ffffff;
+  --accent-glow: rgba(255,255,255,.04);
+  --accent2:     #aaaaaa;
+  --green:       #4ade80;
+  --red:         #f87171;
+  --amber:       #fbbf24;
+  --text:        #ffffff;
+  --text-dim:    #888888;
+  --shadow:      0 1px 4px rgba(0,0,0,.5);
+}
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 14px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+a { color: var(--text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  font-family: var(--font-mono);
+  font-size: .87em;
+  background: var(--surface2);
+  padding: 1px 5px;
+}
+.dim { color: var(--text-dim); }

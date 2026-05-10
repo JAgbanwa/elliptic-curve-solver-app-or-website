@@ -1,1 +1,10 @@
 users.db
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Next.js
+frontend/node_modules/
+frontend/.next/
+.next/
