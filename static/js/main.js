@@ -2708,3 +2708,381 @@ function shareSearchURL() {
     _showCopyToast("📌 Pinned to history!");
   });
 })();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HERO TYPEWRITER  — cycles through famous elliptic curve equations
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function _heroTypewriter() {
+  const PHRASES = [
+    "y² = f(n, x)",
+    "y² = x³ − n²x",
+    "y² = x³ + n",
+    "y² = x³ − x",
+    "y² = x³ + ax + b",
+    "y² = x³ − 2",
+    "y² = x³ + 17",
+  ];
+  let phraseIdx = 0;
+  let charIdx = 0;
+  let typing = true;     // true = typing forward, false = deleting
+  let timer = null;
+
+  function tick() {
+    const el = document.querySelector(".hero-eq");
+    if (!el) { timer = setTimeout(tick, 500); return; }
+    // Make sure cursor exists right next to the eq span
+    let cursor = el.parentNode && el.parentNode.querySelector(".hero-eq-cursor");
+    if (!cursor && el.parentNode) {
+      cursor = document.createElement("span");
+      cursor.className = "hero-eq-cursor";
+      cursor.setAttribute("aria-hidden", "true");
+      cursor.textContent = "|";
+      el.parentNode.insertBefore(cursor, el.nextSibling);
+    }
+    const phrase = PHRASES[phraseIdx];
+
+    if (typing) {
+      charIdx++;
+      el.textContent = phrase.slice(0, charIdx);
+      if (charIdx >= phrase.length) {
+        typing = false;
+        timer = setTimeout(tick, 2000);   // pause when full
+        return;
+      }
+      timer = setTimeout(tick, 70 + Math.random() * 60);
+    } else {
+      charIdx--;
+      el.textContent = phrase.slice(0, charIdx);
+      if (charIdx <= 0) {
+        typing = true;
+        phraseIdx = (phraseIdx + 1) % PHRASES.length;
+        timer = setTimeout(tick, 350);
+        return;
+      }
+      timer = setTimeout(tick, 35);
+    }
+  }
+  // start once DOM is ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => { setTimeout(tick, 1500); });
+  } else {
+    setTimeout(tick, 1500);
+  }
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RANDOM CURVE BUTTON  (🎲)
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function _initRandomCurve() {
+  const btn = document.getElementById("btn-random-curve");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    if (!Array.isArray(EXAMPLES) || EXAMPLES.length === 0) return;
+    const ex = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
+    // y²=f(n,x) mode (most examples)
+    if (typeof switchSolverMode === "function") switchSolverMode("ec");
+    if (typeof switchECVarMode === "function")  switchECVarMode("3var");
+    if (exprInput) exprInput.value = ex.expr || "x**3 - n**2*x";
+    if (nMinIn)    nMinIn.value    = ex.nm ?? -10;
+    if (nMaxIn)    nMaxIn.value    = ex.nx ?? 10;
+    if (nDenomIn)  nDenomIn.value  = ex.nd ?? 1;
+    if (xMinIn)    xMinIn.value    = ex.xm ?? -100;
+    if (xMaxIn)    xMaxIn.value    = ex.xx ?? 100;
+    if (typeof fetchLatex === "function" && exprInput) fetchLatex(exprInput.value);
+    _showCopyToast("🎲 " + (ex.name || "Random curve loaded!"));
+    // record achievement
+    _achRecord({ randomUsed: true });
+    // optional auto-run
+    if (typeof startSearch === "function") setTimeout(startSearch, 250);
+  });
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MATH FACTS  — rotates inside the empty-state card
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function _initMathFacts() {
+  const FACTS = [
+    "Fermat's Last Theorem (1637) was finally proven in 1995 using elliptic curves.",
+    "The congruent number problem — which integers are areas of right triangles with rational sides? — reduces to finding rational points on y² = x³ − n²x.",
+    "Mordell's Theorem (1922): the rational points on an elliptic curve form a finitely generated abelian group.",
+    "The Birch and Swinnerton-Dyer conjecture is one of the seven Millennium Prize Problems — $1 million is on the line.",
+    "The smallest known elliptic curve with rank ≥ 28 was discovered by Noam Elkies in 2006.",
+    "Elliptic curve cryptography (ECC) secures Bitcoin, iMessage, and TLS — using the curve secp256k1.",
+    "An elliptic curve over ℚ has at most 16 torsion points, by Mazur's Theorem.",
+    "The j-invariant classifies elliptic curves over ℂ up to isomorphism — there's exactly one curve for each complex number j.",
+    "Wiles' proof of Fermat's Last Theorem hinges on the modularity of semistable elliptic curves.",
+    "The point at infinity on an elliptic curve serves as the identity element of its group law.",
+    "Euler proved there are no positive integer solutions to x³ + y³ = z³ — the n=3 case of Fermat.",
+    "The chord-and-tangent construction for adding points on a cubic dates back to Diophantus, c. 250 AD.",
+    "Bachet's curve y² = x³ − 2 has only the integer points (3, ±5) — proved by Fermat by infinite descent.",
+    "An elliptic curve y² = x³ + ax + b is non-singular iff its discriminant 4a³ + 27b² ≠ 0.",
+    "Andrew Wiles worked alone on Fermat's Last Theorem for seven years in his attic.",
+    "Goldfeld conjectured that 50% of elliptic curves have rank 0 and 50% have rank 1 — ranks ≥ 2 are 'sparse'.",
+    "The Sato–Tate conjecture (now theorem) describes how elliptic curves' Frobenius traces distribute over primes.",
+    "Lenstra's elliptic curve factorization is the third-fastest known integer factoring algorithm.",
+    "An integer n is congruent iff y² = x³ − n²x has positive rank — and BSD predicts this from a single L-value.",
+    "The Mordell curve y² = x³ + k has been computed for all |k| ≤ 10,000 — but the general case is open.",
+    "The number of integer points on y² = x³ + k is finite (Siegel, 1929) but counting them is hard.",
+    "ECC keys are ~10x shorter than RSA keys for equivalent security — a 256-bit ECC key matches 3072-bit RSA.",
+    "The CM (complex multiplication) elliptic curves have endomorphism rings larger than ℤ.",
+    "Tate's algorithm computes the local data of an elliptic curve at any prime in finite steps.",
+    "The L-function of an elliptic curve encodes deep arithmetic info — its leading coefficient at s=1 conjecturally equals the regulator times the Tate–Shafarevich order.",
+  ];
+
+  let factIdx = Math.floor(Math.random() * FACTS.length);
+  const el = document.getElementById("math-fact-text");
+  if (!el) return;
+  el.textContent = FACTS[factIdx];
+
+  function rotate() {
+    if (!el || !el.isConnected) return;
+    el.classList.add("fade");
+    setTimeout(() => {
+      factIdx = (factIdx + 1) % FACTS.length;
+      el.textContent = FACTS[factIdx];
+      el.classList.remove("fade");
+    }, 350);
+  }
+  setInterval(rotate, 9000);
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACHIEVEMENTS  — localStorage badge system
+   ═══════════════════════════════════════════════════════════════════════════ */
+const ACH_KEY = "ecs-achievements";
+
+const ACHIEVEMENTS = [
+  { id: "first_search",  icon: "🌱", name: "First Steps",        desc: "Run your first search",
+    test: s => s.searches >= 1 },
+  { id: "curious",       icon: "🔍", name: "Curious",            desc: "Run 10 searches",
+    test: s => s.searches >= 10 },
+  { id: "marathon",      icon: "🏃", name: "Marathon Runner",    desc: "Run 50 searches",
+    test: s => s.searches >= 50 },
+  { id: "first_find",    icon: "🎯", name: "First Find",         desc: "Discover your first integer point",
+    test: s => s.solutions >= 1 },
+  { id: "centurion",     icon: "💯", name: "Centurion",          desc: "Find 100 integer points total",
+    test: s => s.solutions >= 100 },
+  { id: "thousand",      icon: "🚀", name: "Thousand-Point Club", desc: "Find 1,000 integer points total",
+    test: s => s.solutions >= 1000 },
+  { id: "speed_demon",   icon: "⚡", name: "Speed Demon",         desc: "Complete a search in under 1 second",
+    test: s => s.minComputeMs > 0 && s.minComputeMs < 1000 },
+  { id: "polyglot",      icon: "🌍", name: "Polyglot",           desc: "Use 3 different languages",
+    test: s => (s.langs || []).length >= 3 },
+  { id: "aesthete",      icon: "🎨", name: "Aesthete",           desc: "Try 3 different wallpapers",
+    test: s => (s.themes || []).length >= 3 },
+  { id: "collector",     icon: "📌", name: "Collector",          desc: "Pin 5 searches to history",
+    test: s => s.pinned >= 5 },
+  { id: "lucky_roll",    icon: "🎲", name: "Lucky Roll",         desc: "Use the random curve button",
+    test: s => !!s.randomUsed },
+  { id: "switcheroo",    icon: "🌗", name: "Switcheroo",         desc: "Toggle between dark and light mode",
+    test: s => !!s.themeToggled },
+  { id: "sharer",        icon: "🔗", name: "Good Sharer",        desc: "Copy a shareable link",
+    test: s => !!s.shared },
+  { id: "scholar",       icon: "📚", name: "Scholar",            desc: "Load 3 examples from the gallery",
+    test: s => s.examplesLoaded >= 3 },
+  { id: "big_hunter",    icon: "∞", name: "Big Hunter",          desc: "Search with n range ≥ 100",
+    test: s => s.maxNRange >= 100 },
+];
+
+function _achLoad() {
+  try {
+    const data = JSON.parse(localStorage.getItem(ACH_KEY) || "{}");
+    return {
+      unlocked: data.unlocked || [],
+      stats: data.stats || {},
+    };
+  } catch {
+    return { unlocked: [], stats: {} };
+  }
+}
+function _achSave(data) {
+  localStorage.setItem(ACH_KEY, JSON.stringify(data));
+}
+
+/** Update stats and check for newly-unlocked achievements */
+function _achRecord(delta) {
+  const data = _achLoad();
+  const s = data.stats;
+
+  // Counters
+  if (delta.searchRun)         s.searches     = (s.searches     || 0) + 1;
+  if (delta.solutionsFound)    s.solutions    = (s.solutions    || 0) + delta.solutionsFound;
+  if (delta.pinnedAdd)         s.pinned       = (s.pinned       || 0) + 1;
+  if (delta.exampleLoaded)     s.examplesLoaded = (s.examplesLoaded || 0) + 1;
+
+  // Min compute
+  if (typeof delta.computeMs === "number" && delta.computeMs > 0) {
+    s.minComputeMs = s.minComputeMs ? Math.min(s.minComputeMs, delta.computeMs) : delta.computeMs;
+  }
+  // Max n range
+  if (typeof delta.nRange === "number") {
+    s.maxNRange = Math.max(s.maxNRange || 0, delta.nRange);
+  }
+  // Sets
+  if (delta.lang)  {
+    s.langs = s.langs || [];
+    if (!s.langs.includes(delta.lang)) s.langs.push(delta.lang);
+  }
+  if (delta.theme) {
+    s.themes = s.themes || [];
+    if (!s.themes.includes(delta.theme)) s.themes.push(delta.theme);
+  }
+  // Flags
+  if (delta.randomUsed)   s.randomUsed   = true;
+  if (delta.themeToggled) s.themeToggled = true;
+  if (delta.shared)       s.shared       = true;
+
+  // Check for newly unlocked
+  const newly = [];
+  for (const ach of ACHIEVEMENTS) {
+    if (!data.unlocked.includes(ach.id) && ach.test(s)) {
+      data.unlocked.push(ach.id);
+      newly.push(ach);
+    }
+  }
+
+  _achSave(data);
+  _achSyncBadge();
+
+  // Fire toasts (one at a time)
+  newly.forEach((ach, i) => {
+    setTimeout(() => _achToast(ach), i * 1800);
+  });
+}
+
+function _achToast(ach) {
+  const toast = document.getElementById("copy-toast");
+  if (!toast) return;
+  toast.textContent = `${ach.icon} Achievement unlocked: ${ach.name}!`;
+  toast.classList.add("visible", "ach-toast");
+  clearTimeout(toast._tid);
+  toast._tid = setTimeout(() => {
+    toast.classList.remove("visible", "ach-toast");
+  }, 3200);
+}
+
+function _achSyncBadge() {
+  const badge = document.getElementById("ach-count-badge");
+  if (!badge) return;
+  const data = _achLoad();
+  const count = data.unlocked.length;
+  badge.textContent = count;
+  badge.classList.toggle("visible", count > 0);
+}
+
+function _achRender() {
+  const grid = document.getElementById("ach-grid");
+  const prog = document.getElementById("ach-progress");
+  if (!grid) return;
+  const data = _achLoad();
+  grid.innerHTML = "";
+  if (prog) prog.textContent = `${data.unlocked.length} / ${ACHIEVEMENTS.length}`;
+
+  ACHIEVEMENTS.forEach(ach => {
+    const unlocked = data.unlocked.includes(ach.id);
+    const card = document.createElement("div");
+    card.className = "ach-card " + (unlocked ? "unlocked" : "locked");
+    card.innerHTML = `
+      <span class="ach-card-icon">${ach.icon}</span>
+      <div class="ach-card-name">${ach.name}</div>
+      <div class="ach-card-desc">${unlocked ? ach.desc : "🔒 " + ach.desc}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+(function _initAchievementsUI() {
+  const btn      = document.getElementById("btn-achievements");
+  const modal    = document.getElementById("ach-modal");
+  const backdrop = document.getElementById("ach-backdrop");
+  const closeBtn = document.getElementById("ach-close");
+
+  function open() {
+    _achRender();
+    modal && modal.classList.add("open");
+    backdrop && backdrop.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+  function close() {
+    modal && modal.classList.remove("open");
+    backdrop && backdrop.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+  if (btn)      btn.addEventListener("click", open);
+  if (closeBtn) closeBtn.addEventListener("click", close);
+  if (backdrop) backdrop.addEventListener("click", close);
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && modal && modal.classList.contains("open")) close();
+  });
+  _achSyncBadge();
+})();
+
+/* ── Hook achievement triggers into existing app actions ────────────────── */
+
+// Track searches: wrap saveSearchToHistory (called on every search completion)
+if (typeof saveSearchToHistory === "function") {
+  const _origSave = saveSearchToHistory;
+  saveSearchToHistory = function () {
+    _origSave.apply(this, arguments);
+    try {
+      const computeMs = (searchMeta && searchMeta.finishedAt && searchMeta.startedAt)
+        ? searchMeta.finishedAt - searchMeta.startedAt : 0;
+      const nRange = (searchMeta && typeof searchMeta.nMin === "number" && typeof searchMeta.nMax === "number")
+        ? Math.abs(searchMeta.nMax - searchMeta.nMin) : 0;
+      _achRecord({
+        searchRun: true,
+        solutionsFound: (allSolutions || []).length,
+        computeMs,
+        nRange,
+      });
+    } catch {}
+  };
+}
+
+// Track language changes
+(function _achWatchLang() {
+  const sel = document.getElementById("lang-select");
+  if (!sel) return;
+  sel.addEventListener("change", () => _achRecord({ lang: sel.value }));
+  _achRecord({ lang: sel.value || "en" });   // record current
+})();
+
+// Track wallpaper changes
+document.addEventListener("click", e => {
+  const opt = e.target.closest && e.target.closest(".wp-opt");
+  if (opt && opt.dataset.wp) _achRecord({ theme: opt.dataset.wp });
+});
+
+// Track theme toggle (dark/light)
+(function _achWatchThemeToggle() {
+  const tbtn = document.getElementById("btn-theme-toggle");
+  if (!tbtn) return;
+  tbtn.addEventListener("click", () => _achRecord({ themeToggled: true }));
+})();
+
+// Track share button
+(function _achWatchShare() {
+  const sbtn = document.getElementById("btn-share-url");
+  if (!sbtn) return;
+  sbtn.addEventListener("click", () => _achRecord({ shared: true }));
+})();
+
+// Track pin button
+(function _achWatchPin() {
+  const pbtn = document.getElementById("btn-save-search");
+  if (!pbtn) return;
+  pbtn.addEventListener("click", () => _achRecord({ pinnedAdd: true }));
+})();
+
+// Track example loads (delegated on the gallery grid)
+(function _achWatchExamples() {
+  const grid = document.getElementById("example-grid")
+            || document.querySelector(".example-grid")
+            || document.querySelector(".gallery-grid");
+  if (!grid) return;
+  grid.addEventListener("click", e => {
+    if (e.target.closest(".example-card") || e.target.closest(".example-card-action")) {
+      _achRecord({ exampleLoaded: true });
+    }
+  });
+})();
