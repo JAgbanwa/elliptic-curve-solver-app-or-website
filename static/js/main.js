@@ -3086,3 +3086,29 @@ document.addEventListener("click", e => {
     }
   });
 })();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BUY ME A COFFEE  — floating button: remember if user dismissed it
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function _initBMC() {
+  const btn = document.getElementById("bmc-float");
+  if (!btn) return;
+  const KEY = "ecs-bmc-hidden-until";
+
+  // If dismissed within the last 7 days, stay hidden
+  const hiddenUntil = parseInt(localStorage.getItem(KEY) || "0", 10);
+  if (hiddenUntil && Date.now() < hiddenUntil) {
+    btn.classList.add("bmc-hidden");
+  }
+
+  const closeBtn = btn.querySelector(".bmc-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      btn.classList.add("bmc-hidden");
+      // Hide for 7 days
+      localStorage.setItem(KEY, String(Date.now() + 7 * 24 * 3600 * 1000));
+    });
+  }
+})();
