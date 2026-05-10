@@ -957,7 +957,7 @@ export default function SolverPage() {
       if (!isNaN(idx) && sols[idx]) return String(sols[idx].n);
       return null;
     };
-    const nVal = getNFromSel(glP) ?? getNFromSel(glQ) ?? plotN || "0";
+    const nVal = (getNFromSel(glP) ?? getNFromSel(glQ) ?? plotN) || "0";
     const P = getPoint(glP), Q = getPoint(glQ);
     try {
       const r = await fetch("/api/group_law", {
