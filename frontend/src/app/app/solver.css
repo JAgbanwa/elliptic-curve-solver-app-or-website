@@ -403,6 +403,7 @@ tbody tr:hover { background: var(--surface); }
   position: fixed; z-index: 200;
   background: var(--bg); border: 1px solid var(--border);
   padding: 4px; box-shadow: var(--shadow); min-width: 160px;
+  max-height: 80vh; overflow-y: auto;
 }
 .wp-picker-label { font-size: .62rem; text-transform: uppercase; letter-spacing: .14em; color: var(--text-dim); padding: 4px 8px 5px; font-family: var(--font-mono); }
 .wp-opt {

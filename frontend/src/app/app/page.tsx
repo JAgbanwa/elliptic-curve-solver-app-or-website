@@ -172,12 +172,29 @@ const WP_THEMES = [
 ];
 
 const FONT_OPTIONS = [
-  { id:"helvetica", label:"Helvetica Neue",  stack:'"Helvetica Neue", Helvetica, Arial, sans-serif' },
-  { id:"georgia",   label:"Georgia",         stack:'Georgia, "Times New Roman", serif' },
-  { id:"courier",   label:"Courier New",     stack:'"Courier New", Courier, monospace' },
-  { id:"trebuchet", label:"Trebuchet MS",    stack:'"Trebuchet MS", "Gill Sans", sans-serif' },
-  { id:"palatino",  label:"Palatino",        stack:'Palatino, "Palatino Linotype", "Book Antiqua", serif' },
-  { id:"menlo",     label:"Menlo / Consolas",stack:'Menlo, Consolas, "DejaVu Sans Mono", monospace' },
+  // sans-serif
+  { id:"helvetica",  label:"Helvetica Neue",   stack:'"Helvetica Neue", Helvetica, Arial, sans-serif' },
+  { id:"trebuchet",  label:"Trebuchet MS",      stack:'"Trebuchet MS", "Gill Sans", sans-serif' },
+  { id:"verdana",    label:"Verdana",           stack:'Verdana, Geneva, Tahoma, sans-serif' },
+  { id:"tahoma",     label:"Tahoma",            stack:'Tahoma, Geneva, sans-serif' },
+  { id:"optima",     label:"Optima",            stack:'Optima, Candara, "Noto Sans", sans-serif' },
+  { id:"futura",     label:"Futura / Century",  stack:'"Century Gothic", "Futura", Futura, sans-serif' },
+  // serif
+  { id:"georgia",    label:"Georgia",           stack:'Georgia, "Times New Roman", serif' },
+  { id:"palatino",   label:"Palatino",          stack:'Palatino, "Palatino Linotype", "Book Antiqua", serif' },
+  { id:"garamond",   label:"Garamond",          stack:'"EB Garamond", Garamond, "Adobe Garamond Pro", serif' },
+  { id:"baskerville",label:"Baskerville",       stack:'"Baskerville Old Face", Baskerville, "Book Antiqua", serif' },
+  { id:"times",      label:"Times New Roman",   stack:'"Times New Roman", Times, serif' },
+  { id:"didot",      label:"Didot / Bodoni",    stack:'Didot, "Bodoni MT", "Bodoni 72", serif' },
+  // monospace
+  { id:"courier",    label:"Courier New",       stack:'"Courier New", Courier, monospace' },
+  { id:"menlo",      label:"Menlo / Consolas",  stack:'Menlo, Consolas, "DejaVu Sans Mono", monospace' },
+  { id:"monaco",     label:"Monaco / SF Mono",  stack:'Monaco, "SF Mono", "Fira Mono", monospace' },
+  { id:"lucida",     label:"Lucida Console",    stack:'"Lucida Console", "Lucida Sans Typewriter", monospace' },
+  // system
+  { id:"system",     label:"System UI",         stack:'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' },
+  { id:"ui-serif",   label:"UI Serif",          stack:'"ui-serif", Georgia, serif' },
+  { id:"ui-mono",    label:"UI Monospace",      stack:'"ui-monospace", "SFMono-Regular", monospace' },
 ];
 
 const FONT_SIZES = [
@@ -1069,9 +1086,33 @@ export default function SolverPage() {
 
       {/* ── Font picker menu ── */}
       {showFontPicker && (
-        <div className="wp-picker-menu" style={{top: fontPickerPos.top + "px", right: fontPickerPos.right + "px", minWidth:200}}>
-          <div className="wp-picker-label">Typeface</div>
-          {FONT_OPTIONS.map(f => (
+        <div className="wp-picker-menu" style={{top: fontPickerPos.top + "px", right: fontPickerPos.right + "px", minWidth:220}}>
+          <div className="wp-picker-label">Sans-serif</div>
+          {FONT_OPTIONS.filter(f => ["helvetica","trebuchet","verdana","tahoma","optima","futura"].includes(f.id)).map(f => (
+            <button key={f.id} className={"wp-opt" + (fontId===f.id?" active":"")} type="button"
+              style={{fontFamily: f.stack}}
+              onClick={() => { setFontId(f.id); localStorage.setItem("ecs-font", f.id); }}>
+              {f.label}
+            </button>
+          ))}
+          <div className="wp-picker-label" style={{marginTop:4}}>Serif</div>
+          {FONT_OPTIONS.filter(f => ["georgia","palatino","garamond","baskerville","times","didot"].includes(f.id)).map(f => (
+            <button key={f.id} className={"wp-opt" + (fontId===f.id?" active":"")} type="button"
+              style={{fontFamily: f.stack}}
+              onClick={() => { setFontId(f.id); localStorage.setItem("ecs-font", f.id); }}>
+              {f.label}
+            </button>
+          ))}
+          <div className="wp-picker-label" style={{marginTop:4}}>Monospace</div>
+          {FONT_OPTIONS.filter(f => ["courier","menlo","monaco","lucida"].includes(f.id)).map(f => (
+            <button key={f.id} className={"wp-opt" + (fontId===f.id?" active":"")} type="button"
+              style={{fontFamily: f.stack}}
+              onClick={() => { setFontId(f.id); localStorage.setItem("ecs-font", f.id); }}>
+              {f.label}
+            </button>
+          ))}
+          <div className="wp-picker-label" style={{marginTop:4}}>System</div>
+          {FONT_OPTIONS.filter(f => ["system","ui-serif","ui-mono"].includes(f.id)).map(f => (
             <button key={f.id} className={"wp-opt" + (fontId===f.id?" active":"")} type="button"
               style={{fontFamily: f.stack}}
               onClick={() => { setFontId(f.id); localStorage.setItem("ecs-font", f.id); }}>
