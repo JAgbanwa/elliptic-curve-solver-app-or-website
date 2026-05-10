@@ -73,6 +73,11 @@ const BrushIcon = () => (
     <path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1 1 2.48 1.02 3.5 1.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-2.5-3.02z"/>
   </svg>
 );
+const TypeIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="4,7 4,4 20,4 20,7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>
+  </svg>
+);
 const TrophyIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="8,21 12,17 16,21"/><line x1="12" y1="17" x2="12" y2="11"/>
@@ -164,6 +169,24 @@ const WP_THEMES = [
   { id:"lissajous", label:"Lissajous" },
   { id:"spirals",   label:"Spirals" },
   { id:"none",      label:"None" },
+];
+
+const FONT_OPTIONS = [
+  { id:"helvetica", label:"Helvetica Neue",  stack:'"Helvetica Neue", Helvetica, Arial, sans-serif' },
+  { id:"georgia",   label:"Georgia",         stack:'Georgia, "Times New Roman", serif' },
+  { id:"courier",   label:"Courier New",     stack:'"Courier New", Courier, monospace' },
+  { id:"trebuchet", label:"Trebuchet MS",    stack:'"Trebuchet MS", "Gill Sans", sans-serif' },
+  { id:"palatino",  label:"Palatino",        stack:'Palatino, "Palatino Linotype", "Book Antiqua", serif' },
+  { id:"menlo",     label:"Menlo / Consolas",stack:'Menlo, Consolas, "DejaVu Sans Mono", monospace' },
+];
+
+const FONT_SIZES = [
+  { id:"xs",  label:"XS",  px:"12px" },
+  { id:"sm",  label:"SM",  px:"13px" },
+  { id:"md",  label:"MD",  px:"14px" },
+  { id:"lg",  label:"LG",  px:"15px" },
+  { id:"xl",  label:"XL",  px:"16px" },
+  { id:"xxl", label:"XXL", px:"18px" },
 ];
 
 /* ── Utility ─────────────────────────────────────────────────────────────── */
@@ -269,6 +292,12 @@ export default function SolverPage() {
   const [showBmc, setShowBmc]         = useState(false);
   const [factIdx, setFactIdx]         = useState(0);
 
+  /* ── Font picker state ────────────────────────────────────────────────── */
+  const [fontId, setFontId]           = useState("helvetica");
+  const [fontSizeId, setFontSizeId]   = useState("md");
+  const [showFontPicker, setShowFontPicker] = useState(false);
+  const [fontPickerPos, setFontPickerPos]   = useState({ top: 0, right: 0 });
+
   /* ── Refs ─────────────────────────────────────────────────────────────── */
   const evtSourceRef  = useRef<EventSource|null>(null);
   const canvasRef     = useRef<HTMLCanvasElement>(null);
@@ -296,6 +325,9 @@ export default function SolverPage() {
     try { setHistory(JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]")); } catch {}
     const wp = localStorage.getItem("wpTheme") || "elliptic";
     setWpTheme(wp);
+    const fid = localStorage.getItem("ecs-font") || "helvetica";
+    const fsid = localStorage.getItem("ecs-font-size") || "md";
+    setFontId(fid); setFontSizeId(fsid);
     const hideUntil = parseInt(localStorage.getItem(BMC_KEY) || "0", 10);
     setShowBmc(Date.now() > hideUntil);
     const p = new URLSearchParams(window.location.search);
@@ -1017,6 +1049,36 @@ export default function SolverPage() {
         </a>
       )}
 
+      {/* ── Font picker menu ── */}
+      {showFontPicker && (
+        <div className="wp-picker-menu" style={{top: fontPickerPos.top + "px", right: fontPickerPos.right + "px", minWidth:200}}>
+          <div className="wp-picker-label">Typeface</div>
+          {FONT_OPTIONS.map(f => (
+            <button key={f.id} className={"wp-opt" + (fontId===f.id?" active":"")} type="button"
+              style={{fontFamily: f.stack}}
+              onClick={() => { setFontId(f.id); localStorage.setItem("ecs-font", f.id); }}>
+              {f.label}
+            </button>
+          ))}
+          <div className="wp-picker-label" style={{marginTop:6}}>Size</div>
+          <div style={{display:"flex", gap:3, padding:"4px 8px 6px"}}>
+            {FONT_SIZES.map(s => (
+              <button key={s.id}
+                type="button"
+                onClick={() => { setFontSizeId(s.id); localStorage.setItem("ecs-font-size", s.id); }}
+                style={{
+                  flex:1, padding:"4px 2px", border: "1px solid var(--border)",
+                  background: fontSizeId===s.id ? "var(--text)" : "transparent",
+                  color: fontSizeId===s.id ? "var(--bg)" : "var(--text-dim)",
+                  fontSize:".65rem", cursor:"pointer", fontFamily:"var(--font-mono)",
+                }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Wallpaper picker menu ── */}
       {showWpPicker && (
         <div className="wp-picker-menu" style={{top: wpPickerPos.top + "px", right: wpPickerPos.right + "px"}}>
@@ -1045,10 +1107,19 @@ export default function SolverPage() {
             <a className="btn-github" href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:"5px",textDecoration:"none"}}>
               <GithubIcon /> GitHub
             </a>
+            <button className="btn-icon" type="button" title="Font & size" onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setFontPickerPos({top: r.bottom+6, right: window.innerWidth-r.right});
+              setShowFontPicker(!showFontPicker);
+              setShowWpPicker(false);
+            }}>
+              <TypeIcon />
+            </button>
             <button className="btn-icon" type="button" title="Choose background" onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
               setWpPickerPos({top: r.bottom+6, right: window.innerWidth-r.right});
               setShowWpPicker(!showWpPicker);
+              setShowFontPicker(false);
             }}>
               <BrushIcon />
             </button>
@@ -1092,7 +1163,11 @@ export default function SolverPage() {
       )}
 
       {/* ── Main App ── */}
-      <main className="main-grid above-canvas" id="app">
+      <main className="main-grid above-canvas" id="app"
+        style={{
+          fontFamily: FONT_OPTIONS.find(f => f.id === fontId)?.stack,
+          fontSize:   FONT_SIZES.find(s => s.id === fontSizeId)?.px,
+        }}>
 
         {/* ─── Left panel: inputs ─────────────────────────────────────────── */}
         <aside className="panel">
@@ -1455,8 +1530,9 @@ export default function SolverPage() {
       {/* ── Toast ── */}
       {toast && <div className="copy-toast">{toast}</div>}
 
-      {/* ── Wallpaper picker backdrop ── */}
+      {/* ── Picker backdrops ── */}
       {showWpPicker && <div style={{position:"fixed",inset:0,zIndex:190}} onClick={() => setShowWpPicker(false)} />}
+      {showFontPicker && <div style={{position:"fixed",inset:0,zIndex:190}} onClick={() => setShowFontPicker(false)} />}
     </>
   );
 }
