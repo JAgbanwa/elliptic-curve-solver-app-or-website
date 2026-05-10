@@ -1978,7 +1978,7 @@ def api_group_law():
         return {"ok": False, "error": f"Cannot extract curve coefficients: {exc}"}
 
     def _parse_pt(d):
-        if not d or d.get("x") is None:
+        if not d or d.get("x") in (None, "O", "o"):
             return "O"
         try:
             return (Fraction(str(d["x"])), Fraction(str(d["y"])))

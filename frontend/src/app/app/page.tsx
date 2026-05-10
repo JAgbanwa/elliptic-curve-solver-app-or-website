@@ -946,19 +946,29 @@ export default function SolverPage() {
   async function computeGroupLaw() {
     const sols = allSolsRef.current;
     const getPoint = (v: string) => {
-      if (v === "O") return { x:"O", y:"O" };
+      if (v === "O") return null;
       const idx = parseInt(v, 10);
-      if (!isNaN(idx) && sols[idx]) return { x:sols[idx].x, y:sols[idx].y };
-      return { x:"O", y:"O" };
+      if (!isNaN(idx) && sols[idx]) return { x: String(sols[idx].x), y: String(sols[idx].y) };
+      return null; // treat unknown as O
     };
+    // Derive n from whichever point is a real solution; fall back to plotN or "0"
+    const getNFromSel = (v: string) => {
+      const idx = parseInt(v, 10);
+      if (!isNaN(idx) && sols[idx]) return String(sols[idx].n);
+      return null;
+    };
+    const nVal = getNFromSel(glP) ?? getNFromSel(glQ) ?? plotN || "0";
     const P = getPoint(glP), Q = getPoint(glQ);
     try {
       const r = await fetch("/api/group_law", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ expr: expr.trim(), n_val: plotN, P, Q }),
+        body: JSON.stringify({ expr: expr.trim(), n_val: nVal, p1: P, p2: Q }),
       });
       const d = await r.json();
-      if (d.ok) setGroupLawResult(`P + Q = (${d.x}, ${d.y})`);
+      if (d.ok) {
+        if (d.is_infinity) setGroupLawResult("P ⊕ Q = O (point at infinity)");
+        else setGroupLawResult(`P ⊕ Q = (${d.result.x}, ${d.result.y})`);
+      }
       else setGroupLawResult("Error: " + d.error);
     } catch { setGroupLawResult("Request failed."); }
   }
