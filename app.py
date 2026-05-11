@@ -2229,6 +2229,87 @@ def api_frobenius():
     }
 
 
+# ── AI Chat endpoint ──────────────────────────────────────────────────────────
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    """
+    Stream a GPT-4o response back to the client as SSE.
+
+    Request body (JSON):
+        {
+          "messages": [{"role": "user"|"assistant", "content": "..."}],
+          "context":  "optional solver context string"
+        }
+    """
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return {"ok": False, "error": "OPENAI_API_KEY not configured on the server."}, 500
+
+    data     = request.get_json(silent=True) or {}
+    messages = data.get("messages", [])
+    context  = data.get("context", "").strip()
+
+    # Validate messages list
+    if not isinstance(messages, list) or len(messages) == 0:
+        return {"ok": False, "error": "No messages provided."}, 400
+    for m in messages:
+        if not isinstance(m, dict) or m.get("role") not in ("user", "assistant") or not isinstance(m.get("content"), str):
+            return {"ok": False, "error": "Invalid message format."}, 400
+        # Truncate each message to prevent abuse
+        m["content"] = m["content"][:4000]
+
+    system_content = (
+        "You are an expert AI assistant specialising in elliptic curves, number theory, "
+        "and algebraic geometry. You help users of the Elliptic Curve Solver web app — "
+        "a tool that finds integer and rational points on parametric elliptic curves of "
+        "the form y² = f(n, x).\n\n"
+        "Your capabilities include:\n"
+        "• Explaining elliptic curve theory (Weierstrass form, group law, torsion, rank, BSD conjecture)\n"
+        "• Interpreting solutions: what integer points mean geometrically and arithmetically\n"
+        "• Suggesting search parameters or example curves\n"
+        "• Explaining the chord-tangent addition law and point doubling\n"
+        "• Discussing modular forms, L-functions, and related topics\n"
+        "• Helping debug unexpected results\n\n"
+        "Be concise, precise, and use mathematical notation where helpful (e.g. y² = x³ − x). "
+        "When giving equations, prefer plain text notation the user can paste into the solver "
+        "(Python syntax: ** for powers, * for multiplication)."
+    )
+    if context:
+        system_content += f"\n\nCurrent solver context:\n{context[:800]}"
+
+    full_messages = [{"role": "system", "content": system_content}] + messages
+
+    def generate():
+        try:
+            from openai import OpenAI  # noqa: PLC0415
+            client = OpenAI(api_key=api_key)
+            stream = client.chat.completions.create(
+                model="gpt-4o",
+                messages=full_messages,
+                max_tokens=1024,
+                temperature=0.5,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    payload = json.dumps({"type": "delta", "content": delta})
+                    yield f"data: {payload}\n\n"
+            yield "data: " + json.dumps({"type": "done"}) + "\n\n"
+        except Exception as exc:  # noqa: BLE001
+            yield "data: " + json.dumps({"type": "error", "message": str(exc)}) + "\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5001))
