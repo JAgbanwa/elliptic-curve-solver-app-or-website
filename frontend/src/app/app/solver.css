@@ -695,6 +695,13 @@ html[data-theme="dark"] .ai-chat-msg--assistant .ai-chat-bubble {
 }
 @keyframes ai-blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
+/* "Thinking…" placeholder before first token */
+.ai-chat-thinking {
+  color: var(--text-dim, #888);
+  font-style: italic;
+  animation: ai-blink 1.2s step-end infinite;
+}
+
 .ai-chat-error {
   font-size: .75rem;
   color: #c00;

@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       try {
         const completion = await client.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-4o-mini",
           messages: [{ role: "system", content: systemContent }, ...messages],
           max_tokens: 1024,
           temperature: 0.5,

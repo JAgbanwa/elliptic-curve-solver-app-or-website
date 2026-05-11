@@ -180,8 +180,8 @@ export default function AIChatWidget({ context }: Props) {
             {messages.map((m, i) => (
               <div key={i} className={`ai-chat-msg ai-chat-msg--${m.role}`}>
                 <div className="ai-chat-bubble">
-                  {m.content}
-                  {m.streaming && <span className="ai-chat-cursor" />}
+                  {m.content || (m.streaming ? <span className="ai-chat-thinking">Thinking…</span> : null)}
+                  {m.streaming && m.content && <span className="ai-chat-cursor" />}
                 </div>
               </div>
             ))}
