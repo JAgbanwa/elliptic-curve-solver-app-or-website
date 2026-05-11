@@ -3,7 +3,6 @@ import "./solver.css";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import Link from "next/link";
-import AIChatWidget from "@/components/AIChatWidget";
 
 /* ── SVG icon components ─────────────────────────────────────────────────── */
 const SunIcon = () => (
@@ -1755,8 +1754,6 @@ ${tableRows}
       {showWpPicker && <div style={{position:"fixed",inset:0,zIndex:190}} onClick={() => setShowWpPicker(false)} />}
       {showFontPicker && <div style={{position:"fixed",inset:0,zIndex:190}} onClick={() => setShowFontPicker(false)} />}
 
-      {/* ── AI Chat Widget ── */}
-      <AIChatWidget context={`Equation: ${expr || "(none)"}, n range: ${nMin}–${nMax}, solutions found: ${solutions.length}`} />
     </>
   );
 }
