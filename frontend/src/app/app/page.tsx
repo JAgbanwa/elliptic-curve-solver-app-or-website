@@ -792,7 +792,7 @@ export default function SolverPage() {
     let solsForN: {x:string;y:string}[];
     if (sols.length > 0) {
       pN = String(sols[0].n);
-      solsForN = sols.filter(s => String(s.n) === pN).map(s => ({x:s.x,y:s.y}));
+      solsForN = sols.filter(s => String(s.n) === pN).map(s => ({x:String(s.x),y:String(s.y)}));
     } else {
       pN = searchMetaRef.current.nMin || "0";
       solsForN = [];
@@ -1176,8 +1176,8 @@ ${tableRows}
     const rows: React.ReactNode[] = [];
     let lastN: string | null = null;
     filteredSols.forEach((sol, i) => {
-      if (sol.n !== lastN) {
-        lastN = sol.n;
+      if (String(sol.n) !== lastN) {
+        lastN = String(sol.n);
         rows.push(<tr key={"g"+sol.n+i} className="n-group-row"><td colSpan={6}>n = {sol.n}</td></tr>);
       }
       rows.push(
