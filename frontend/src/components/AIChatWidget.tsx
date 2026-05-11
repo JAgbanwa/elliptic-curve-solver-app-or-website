@@ -75,26 +75,26 @@ export default function AIChatWidget({ context }: Props) {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (!raw) continue;
-          try {
-            const ev = JSON.parse(raw);
-            if (ev.type === "delta") {
-              setMessages(prev => {
-                const next = [...prev];
-                const last = next[next.length - 1];
-                if (last?.streaming) next[next.length - 1] = { ...last, content: last.content + ev.content };
-                return next;
-              });
-            } else if (ev.type === "done") {
-              setMessages(prev => {
-                const next = [...prev];
-                const last = next[next.length - 1];
-                if (last?.streaming) next[next.length - 1] = { ...last, streaming: false };
-                return next;
-              });
-            } else if (ev.type === "error") {
-              throw new Error(ev.message);
-            }
-          } catch { /* ignore parse errors for individual chunks */ }
+          // Only catch JSON parse errors — let event errors propagate to outer catch
+          let ev: { type: string; content?: string; message?: string } | null = null;
+          try { ev = JSON.parse(raw); } catch { continue; }
+          if (ev?.type === "delta") {
+            setMessages(prev => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.streaming) next[next.length - 1] = { ...last, content: last.content + (ev!.content ?? "") };
+              return next;
+            });
+          } else if (ev?.type === "done") {
+            setMessages(prev => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.streaming) next[next.length - 1] = { ...last, streaming: false };
+              return next;
+            });
+          } else if (ev?.type === "error") {
+            throw new Error(ev.message ?? "Unknown stream error");
+          }
         }
       }
     } catch (err: unknown) {
@@ -107,7 +107,13 @@ export default function AIChatWidget({ context }: Props) {
           return next;
         });
       } else {
-        setError(err instanceof Error ? err.message : "Unknown error");
+        const raw = err instanceof Error ? err.message : "Unknown error";
+        const friendly = raw.includes("429") || raw.includes("quota")
+          ? "OpenAI quota exceeded. Add credits at platform.openai.com/settings/billing."
+          : raw.includes("401") || raw.includes("Incorrect API key")
+          ? "Invalid API key. Check OPENAI_API_KEY in frontend/.env.local."
+          : raw;
+        setError(friendly);
         // Remove the empty streaming bubble
         setMessages(prev => prev.filter((_, i) => !(i === prev.length - 1 && prev[i].streaming)));
       }
