@@ -109,7 +109,7 @@ export default function AIChatWidget({ context }: Props) {
       } else {
         const raw = err instanceof Error ? err.message : "Unknown error";
         const friendly = raw.includes("429") || raw.includes("quota")
-          ? "OpenAI quota exceeded. Add credits at platform.openai.com/settings/billing."
+          ? "OpenAI quota exceeded. Add credits at platform.openai.com/account/billing."
           : raw.includes("401") || raw.includes("Incorrect API key")
           ? "Invalid API key. Check OPENAI_API_KEY in frontend/.env.local."
           : raw;
