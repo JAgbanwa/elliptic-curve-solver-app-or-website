@@ -117,8 +117,24 @@ const CoffeeIcon = () => (
 );
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
-interface Solution { n: string | number; x: string | number; y: string | number; }
+interface Solution  { n: string | number; x: string | number; y: string | number; }
 interface ArithObs  { icon: string; text: string; }
+interface ProofResult {
+  ok: boolean;
+  proved?: boolean;
+  type?: string;
+  modulus?: number | null;
+  is_weierstrass?: boolean;
+  lhs_residues?: number[];
+  rhs_residues?: number[];
+  variables?: string[];
+  steps?: string[];
+  conclusion?: string;
+  reason?: string;
+  message?: string;
+  suggestion?: string;
+  error?: string;
+}
 
 /* ── Arithmetic observation engine (client-side, no backend call) ──────── */
 function computeArithObs(solutions: Solution[], expr: string): ArithObs[] {
@@ -403,6 +419,10 @@ export default function SolverPage() {
   const [nTested, setNTested]         = useState(0);
   const [pointFilter, setPointFilter] = useState<"all"|"integer"|"rational">("all");
   const [curveInfoRows, setCurveInfoRows] = useState<any[]>([]);
+
+  /* ── Infeasibility proof state ───────────────────────────────────── */
+  const [proofState, setProofState] = useState<"idle"|"loading"|"proved"|"failed">("idle");
+  const [proofData,  setProofData]  = useState<ProofResult | null>(null);
 
   /* ── Plot state ───────────────────────────────────────────────────────── */
   const [plotData, setPlotData]   = useState<any>(null);
@@ -694,12 +714,34 @@ export default function SolverPage() {
     setProgress(0);
   }, []);
 
+  /* ── Infeasibility proof ────────────────────────────────────────── */
+  const attemptProof = useCallback(async () => {
+    setProofState("loading");
+    setProofData(null);
+    try {
+      const equation = solverMode === "ec" ? `y**2 = ${expr}` : genEq;
+      const res = await fetch("/api/prove-infeasible", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ equation }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const d: ProofResult = await res.json();
+      setProofData(d);
+      setProofState(d.proved ? "proved" : "failed");
+    } catch (e) {
+      setProofData({ ok: false, error: String(e) });
+      setProofState("failed");
+    }
+  }, [solverMode, expr, genEq]);
+
   /* ── Start search ────────────────────────────────────────────────────── */
   const startSearch = useCallback(() => {
     if (evtSourceRef.current) { evtSourceRef.current.close(); evtSourceRef.current = null; }
     allSolsRef.current = [];
     nTotalRef.current = 0;
     setSolutions([]); setShowTable(false); setShowEmpty(false);
+    setProofState("idle"); setProofData(null);
     setProgress(0); setProgressMsg(""); setWarning("");
     setNSummary([]); setNTested(0);
     setShowPlot(false); setPlotData(null); setViewport(null);
@@ -1695,6 +1737,7 @@ ${tableRows}
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => {
               stopSearch();
               setSolutions([]); setShowTable(false); setShowEmpty(false);
+              setProofState("idle"); setProofData(null);
               setStatusMsg("Enter a curve expression and click Run Search.");
               setStatusCls("status-idle"); setProgress(0); setShowPlot(false);
               setNSummary([]); setCurveInfoRows([]);
@@ -1871,6 +1914,53 @@ ${tableRows}
                 <div className="math-fact-label"><LightbulbIcon /> Did you know?</div>
                 <div className="math-fact-text">{MATH_FACTS[factIdx]}</div>
               </div>
+
+              {/* ── Infeasibility proof ── */}
+              {proofState === "idle" && (
+                <button className="proof-trigger-btn" type="button" onClick={attemptProof}>
+                  Attempt rigorous proof of infeasibility →
+                </button>
+              )}
+              {proofState === "loading" && (
+                <div className="proof-loading">
+                  <span className="proof-spinner">◐</span>
+                  Searching for a congruence obstruction…
+                </div>
+              )}
+              {(proofState === "proved" || proofState === "failed") && proofData && (
+                <div className={`proof-panel${proofData.proved ? " proof-panel--proved" : ""}`}>
+                  <div className="proof-panel-header">
+                    {proofData.proved
+                      ? `✓  Proved — Congruence Obstruction (mod ${proofData.modulus})`
+                      : "─  No Simple Proof Found"}
+                  </div>
+                  {proofData.proved && proofData.steps && (
+                    <ol className="proof-steps">
+                      {proofData.steps.map((step, i) => <li key={i}>{step}</li>)}
+                    </ol>
+                  )}
+                  {proofData.proved && proofData.lhs_residues && proofData.rhs_residues && (
+                    <div className="proof-residues">
+                      <span className="proof-residue-label">y² mod {proofData.modulus}</span>
+                      <span className="proof-residue-set">{"{"}{proofData.lhs_residues.join(", ")}{"}"}</span>
+                      <span className="proof-residue-op">∩</span>
+                      <span className="proof-residue-set">{"{"}{proofData.rhs_residues.join(", ")}{"}"}</span>
+                      <span className="proof-residue-op">=</span>
+                      <span className="proof-residue-empty">∅</span>
+                    </div>
+                  )}
+                  {!proofData.proved && (
+                    <div style={{padding: "10px 14px"}}>
+                      <p className="proof-message">{proofData.message ?? proofData.error}</p>
+                      {proofData.suggestion && <p className="proof-suggestion">{proofData.suggestion}</p>}
+                    </div>
+                  )}
+                  <button className="proof-retry-btn" type="button"
+                    onClick={() => { setProofState("idle"); setProofData(null); }}>
+                    ← Try again
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </section>

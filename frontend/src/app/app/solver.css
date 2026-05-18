@@ -668,4 +668,100 @@ html[data-theme="dark"] .insight-intuition { background: var(--surface, #111); }
 }
 .arith-obs-text { color: var(--text); }
 
+/* ── Infeasibility Proof panel ──────────────────────────────────────────────── */
+.proof-trigger-btn {
+  margin-top: 14px;
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  transition: background .1s;
+}
+.proof-trigger-btn:hover { background: var(--surface, #f5f5f5); }
+
+@keyframes proof-spin { to { transform: rotate(360deg); } }
+.proof-spinner { display: inline-block; animation: proof-spin 1s linear infinite; }
+.proof-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: .8rem;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.proof-panel {
+  margin-top: 14px;
+  border: 1.5px solid var(--border);
+  text-align: left;
+  width: 100%;
+}
+.proof-panel--proved { border-color: var(--text); }
+.proof-panel-header {
+  padding: 8px 14px;
+  font-size: .7rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface, #f9f9f9);
+}
+.proof-steps {
+  margin: 0;
+  padding: 12px 14px 12px 32px;
+  font-size: .79rem;
+  line-height: 1.75;
+  color: var(--text);
+}
+.proof-steps li { margin-bottom: 2px; }
+.proof-residues {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 8px 14px 10px;
+  font-size: .76rem;
+  font-family: var(--font-mono);
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.proof-residue-label { color: var(--text-dim); }
+.proof-residue-set   { color: var(--text); font-weight: 600; }
+.proof-residue-op    { color: var(--text-dim); }
+.proof-residue-empty { color: var(--text); font-weight: 700; font-size: .9rem; }
+.proof-message {
+  font-size: .79rem;
+  line-height: 1.55;
+  color: var(--text);
+  margin: 0;
+}
+.proof-suggestion {
+  margin: 6px 0 0;
+  font-size: .74rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.proof-retry-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  font-size: .72rem;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  text-align: left;
+  transition: background .1s, color .1s;
+}
+.proof-retry-btn:hover { background: var(--surface, #f5f5f5); color: var(--text); }
+
+
 

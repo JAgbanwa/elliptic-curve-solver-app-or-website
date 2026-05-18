@@ -4088,6 +4088,185 @@ def api_conjecture():
     })
 
 
+# ── Infeasibility Proof Engine ─────────────────────────────────────────────────
+
+@app.route("/api/prove-infeasible", methods=["POST"])
+def api_prove_infeasible():
+    """
+    Attempt to prove a Diophantine equation has no integer solutions via
+    congruence (modular arithmetic) obstructions.
+
+    The algorithm: for each small modulus m, enumerate every combination of
+    variable residues mod m and check whether the equation is ever ≡ 0 (mod m).
+    If no combination satisfies the equation mod m, that is a rigorous proof
+    that no integer solution can exist.
+
+    Request body (JSON):
+        { "equation": "y**2 = x**3 + 7" }   -- equation with = sign
+        { "equation": "y**2 - x**3 - 7"  }   -- bare expression (= 0 implied)
+    """
+    import itertools as _it_p
+    import time as _t_p
+
+    data = request.get_json(silent=True) or {}
+    eq_input = (data.get("equation") or "").strip()
+
+    if not eq_input:
+        return jsonify({"ok": False, "error": "No equation provided."}), 400
+
+    if _FORBIDDEN.search(eq_input):
+        return jsonify({"ok": False, "error": "Expression contains forbidden terms."}), 400
+
+    # ── Parse equation ──────────────────────────────────────────────────────
+    try:
+        sym_map = {v: symbols(v) for v in "xynabckt"}
+        if "=" in eq_input:
+            lhs_s, rhs_s = eq_input.split("=", 1)
+            lhs_expr = sympify(lhs_s.strip(), locals=sym_map)
+            rhs_expr = sympify(rhs_s.strip(), locals=sym_map)
+        else:
+            from sympy import S as _S
+            lhs_expr = sympify(eq_input, locals=sym_map)
+            rhs_expr = _S.Zero
+        full_expr = lhs_expr - rhs_expr
+        free_syms = sorted(full_expr.free_symbols, key=str)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Parse error: {exc}"}), 400
+
+    # ── Trivial constant case ────────────────────────────────────────────────
+    if not free_syms:
+        try:
+            val = int(full_expr)
+            if val == 0:
+                return jsonify({
+                    "ok": True, "proved": False, "reason": "trivially_true",
+                    "message": "The equation is trivially satisfied (reduces to 0 = 0).",
+                })
+            return jsonify({
+                "ok": True, "proved": True, "type": "trivially_false",
+                "modulus": None,
+                "steps": [
+                    f"The equation simplifies to the arithmetic statement {val} = 0.",
+                    "This is false, so no solutions exist. \u25a1",
+                ],
+                "conclusion": f"The equation is identically false ({val} \u2260 0). No integer solutions exist.",
+            })
+        except Exception:
+            pass
+
+    if len(free_syms) > 3:
+        return jsonify({
+            "ok": True, "proved": False, "reason": "too_many_vars",
+            "message": (
+                f"The equation has {len(free_syms)} free variables. "
+                "The modular proof engine supports \u2264 3 variables."
+            ),
+        })
+
+    # ── Detect y\u00b2 = f(x, \u2026) Weierstrass form for a richer proof display ─────────
+    y_sym_p = sym_map.get("y", symbols("y"))
+    is_weierstrass = (lhs_expr - y_sym_p ** 2 == 0)
+
+    # ── Try successive modular obstructions ─────────────────────────────────
+    MODULI = [2, 3, 4, 5, 7, 8, 9, 11, 13, 16, 24, 25]
+    t0 = _t_p.time()
+
+    for m in MODULI:
+        if _t_p.time() - t0 > 12:
+            break
+        if len(free_syms) == 3 and m > 11:
+            continue  # avoid m\u00b3 explosion for 3-variable equations
+
+        # Check every residue combination
+        has_sol = False
+        for vals in _it_p.product(range(m), repeat=len(free_syms)):
+            subs = dict(zip(free_syms, vals))
+            try:
+                if int(full_expr.subs(subs)) % m == 0:
+                    has_sol = True
+                    break
+            except Exception:
+                has_sol = True
+                break
+
+        if has_sol:
+            continue  # this modulus gives no obstruction
+
+        # ── Build rigorous proof ─────────────────────────────────────────────
+        var_names = [str(s) for s in free_syms]
+
+        if is_weierstrass:
+            non_y = [s for s in free_syms if str(s) != "y"]
+            # Quadratic residues mod m
+            y_qr = sorted(set(k ** 2 % m for k in range(m)))
+            # Values the RHS takes mod m
+            rhs_res = sorted(set(
+                int(rhs_expr.subs(dict(zip(non_y, vals)))) % m
+                for vals in _it_p.product(range(m), repeat=len(non_y))
+            ))
+            qr_str   = "{" + ", ".join(map(str, y_qr))   + "}"
+            rhs_fmt  = "{" + ", ".join(map(str, rhs_res)) + "}"
+            nv_str   = ", ".join(str(s) for s in non_y) if non_y else "x"
+            steps = [
+                f"We reduce y\u00b2 = {rhs_s.strip()} modulo {m}.",
+                (f"For any integer y, y\u00b2 mod {m} lies in {qr_str} "
+                 f"(\u201cquadratic residues mod {m}\u201d)."),
+                (f"Evaluating {rhs_s.strip()} for {nv_str} \u2261 0, 1, \u2026, {m - 1} "
+                 f"(mod {m}) gives residues in {rhs_fmt}."),
+                f"The sets {qr_str} and {rhs_fmt} are disjoint \u2014 they share no element.",
+                (f"Equality y\u00b2 = f(x) would require a common residue mod {m}. "
+                 f"None exists, so the equation has no integer solution. \u25a1"),
+            ]
+            conclusion = (
+                f"QR({m}) = {qr_str},  rhs mod {m} = {rhs_fmt},  "
+                f"intersection = \u2205  \u27f9  no solutions. \u25a1"
+            )
+            lhs_res_out = y_qr
+            rhs_res_out = rhs_res
+        else:
+            vars_str = ", ".join(var_names)
+            total    = m ** len(free_syms)
+            steps = [
+                f"We work modulo {m}.",
+                (f"We check all {total} combinations of ({vars_str}) "
+                 f"with each variable ranging over {{0, 1, \u2026, {m - 1}}}."),
+                f"For every combination, LHS \u2212 RHS \u2262 0 (mod {m}).",
+                (f"Any integer solution would satisfy the equation mod {m}. "
+                 f"No residue class does, so no integer solution exists. \u25a1"),
+            ]
+            conclusion = f"No solution exists modulo {m}. \u25a1"
+            lhs_res_out = None
+            rhs_res_out = None
+
+        return jsonify({
+            "ok": True,
+            "proved": True,
+            "type": "congruence_obstruction",
+            "modulus": m,
+            "is_weierstrass": is_weierstrass,
+            "lhs_residues": lhs_res_out,
+            "rhs_residues": rhs_res_out,
+            "variables": var_names,
+            "steps": steps,
+            "conclusion": conclusion,
+        })
+
+    # ── No obstruction found ────────────────────────────────────────────────
+    return jsonify({
+        "ok": True,
+        "proved": False,
+        "reason": "no_simple_obstruction",
+        "moduli_checked": MODULI,
+        "message": (
+            "No congruence obstruction was found for moduli up to 25. "
+            "This doesn\u2019t mean solutions exist \u2014 it means any proof of infeasibility "
+            "would require deeper methods: infinite descent, Thue\u2013Mahler equations, "
+            "or Baker\u2019s theory of linear forms in logarithms."
+        ),
+        "suggestion": "Try the Mathematician\u2019s Lens for deeper curve analysis.",
+    })
+
+
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5001))
