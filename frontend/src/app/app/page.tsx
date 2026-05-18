@@ -1960,7 +1960,16 @@ ${tableRows}
                   {!proofData.proved && (
                     <div style={{padding: "10px 14px"}}>
                       <p className="proof-message">{proofData.message ?? proofData.error}</p>
-                      {proofData.suggestion && <p className="proof-suggestion">{proofData.suggestion}</p>}
+                      {proofData.suggestion && (
+                        <p className="proof-suggestion">
+                          <Link
+                            href={`/explore?eq=${encodeURIComponent(solverMode === "ec" ? `y**2 = ${expr}` : genEq)}`}
+                            className="proof-suggestion-link"
+                          >
+                            {proofData.suggestion}
+                          </Link>
+                        </p>
+                      )}
                     </div>
                   )}
                   <button className="proof-retry-btn" type="button"

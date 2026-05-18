@@ -1,7 +1,8 @@
 "use client";
 import "./explore.css";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTheme } from "@/components/ThemeProvider";
 import { MemoryWidget } from "@/components/MemoryWidget";
 
@@ -48,9 +49,10 @@ const GithubIcon = () => (
 /* ── Main page component ─────────────────────────────────────────────────────── */
 export default function ExplorePage() {
   const { theme, toggle } = useTheme();
+  const searchParams = useSearchParams();
 
-  // Input state
-  const [equation, setEquation]   = useState("x**3 + y**3 + z**3 - k");
+  // Input state — seed from ?eq= query param if present
+  const [equation, setEquation]   = useState(() => searchParams.get("eq") ?? "x**3 + y**3 + z**3 - k");
   const [param, setParam]         = useState("k");
   const [bound, setBound]         = useState(12);
 
@@ -61,6 +63,14 @@ export default function ExplorePage() {
     new Set(["profile", "obstruction"])
   );
   const [openCards, setOpenCards] = useState<Set<string>>(new Set());
+
+  // Auto-run when arriving via ?eq= deep-link
+  useEffect(() => {
+    const eq = searchParams.get("eq");
+    if (eq) { handleExplore(); }
+    // Only on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Extract single-letter variable names from the equation for MemoryWidget
   const detectedVars = useMemo(() => {

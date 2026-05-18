@@ -747,6 +747,15 @@ html[data-theme="dark"] .insight-intuition { background: var(--surface, #111); }
   color: var(--text-dim);
   font-style: italic;
 }
+.proof-suggestion-link {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  font-style: italic;
+  transition: opacity .1s;
+}
+.proof-suggestion-link:hover { opacity: .65; }
 .proof-retry-btn {
   display: block;
   width: 100%;
