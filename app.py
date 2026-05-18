@@ -27,7 +27,7 @@ except ImportError:
     _mpmath = None  # type: ignore[assignment]
     _MPMATH = False
 
-from flask import Flask, render_template, request, Response, stream_with_context
+from flask import Flask, jsonify, render_template, request, Response, stream_with_context
 from sympy import symbols, sympify, lambdify, latex as sym_latex
 from sympy.core.sympify import SympifyError
 
