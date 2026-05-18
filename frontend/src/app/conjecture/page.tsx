@@ -118,6 +118,15 @@ export default function ConjecturePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ equation, param, bound }),
       });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(
+          `Backend returned HTTP ${res.status}. ` +
+          (res.status === 404
+            ? "The Flask server may need a restart to load new endpoints."
+            : text.slice(0, 200))
+        );
+      }
       const json: ConjectureResult = await res.json();
       if (!json.ok) {
         setError(json.error ?? "Unknown error");
@@ -125,7 +134,11 @@ export default function ConjecturePage() {
         setResult(json);
       }
     } catch (e) {
-      setError(String(e));
+      if (e instanceof SyntaxError) {
+        setError("Received a non-JSON response. Make sure the Flask backend is running (python app.py).");
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       stopMsgCycle();
       setLoading(false);
