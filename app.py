@@ -512,11 +512,28 @@ def api_from_latex():
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": f"Cannot parse LaTeX: {exc}"}
 
-    # Validate: only n and x symbols allowed
+    # Validate: only n and x symbols allowed in RHS of y²=f(x,n)
+    # If y (or other vars) appear, automatically re-parse as a full gen equation
     allowed = {n_sym, x_sym}
     unknown = sym_expr.free_symbols - allowed
     if unknown:
-        return {"ok": False, "error": f"Unknown symbol(s) in LaTeX: {', '.join(str(s) for s in unknown)}. Only n and x are allowed."}
+        # Try to recover by treating the FULL input as a general equation
+        gen_allowed = {n_sym, x_sym, y_sym}
+        try:
+            parts = re.split(r'(?<!\\)=', latex_raw, maxsplit=1)
+            if len(parts) == 2:
+                lhs_s = parse_latex(parts[0].strip()) if parts[0].strip() else sympify("0")
+                rhs_s = parse_latex(parts[1].strip()) if parts[1].strip() else sympify("0")
+            else:
+                lhs_s, rhs_s = parse_latex(latex_raw.strip()), sympify("0")
+            still_bad = (lhs_s.free_symbols | rhs_s.free_symbols) - gen_allowed
+            if still_bad:
+                return {"ok": False, "error": f"Unknown symbol(s) in equation: {', '.join(str(s) for s in still_bad)}. Only x, y, and n are allowed."}
+            lhs_py = str(_collect(_expand(lhs_s), [y_sym, x_sym]))
+            rhs_py = str(_collect(_expand(rhs_s), [y_sym, x_sym]))
+            return {"ok": True, "eq": f"{lhs_py} = {rhs_py}", "auto_gen": True}
+        except Exception:
+            return {"ok": False, "error": f"Unknown symbol(s) in LaTeX: {', '.join(str(s) for s in unknown)}. Only x, y, and n are allowed."}
 
     # Produce a clean, human-readable Python expression: expand then collect by x
     try:

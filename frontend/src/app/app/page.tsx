@@ -668,9 +668,17 @@ export default function SolverPage() {
       const r = await fetch("/api/from_latex", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({latex: latexPaste, mode: solverMode}) });
       const d = await r.json();
       if (d.ok) {
-        if (solverMode === "gen") setGenEq(d.eq || d.expr);
-        else setExpr(d.expr);
-        setLatexStatus("Loaded!"); setLatexStatusOk(true);
+        if (d.auto_gen) {
+          // Backend detected a full equation with y — switch to gen mode automatically
+          setSolverMode("gen"); setGenEq(d.eq);
+          setLatexStatus("Loaded as General Diophantine (equation uses y)."); setLatexStatusOk(true);
+        } else if (solverMode === "gen") {
+          setGenEq(d.eq || d.expr);
+          setLatexStatus("Loaded!"); setLatexStatusOk(true);
+        } else {
+          setExpr(d.expr);
+          setLatexStatus("Loaded!"); setLatexStatusOk(true);
+        }
       } else { setLatexStatus("Error: " + d.error); setLatexStatusOk(false); }
     } catch { setLatexStatus("Request failed — is the server running?"); setLatexStatusOk(false); }
   }
