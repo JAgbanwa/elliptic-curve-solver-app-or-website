@@ -2875,6 +2875,795 @@ def api_chat():
     )
 
 
+# ── Equation Explorer ─────────────────────────────────────────────────────────
+
+def _explore_eval_fast(expr, vars_list):
+    """Return a fast Python callable for the expression, falling back to subs."""
+    from sympy import lambdify
+    try:
+        fn = lambdify(vars_list, expr, modules=[])
+        fn(*([0] * len(vars_list)))  # smoke test
+        return fn
+    except Exception:
+        return lambda *vals: float(expr.subs(list(zip(vars_list, vals))))
+
+
+def _explore_profile_section(expr, var_syms):
+    from sympy import total_degree, expand, Symbol, simplify
+    cards = []
+    vars_list = list(var_syms.values())
+    var_names = list(var_syms.keys())
+    n = len(vars_list)
+
+    try:
+        deg = total_degree(expand(expr), *vars_list)
+    except Exception:
+        deg = -1
+
+    # Homogeneity check
+    is_hom = False
+    try:
+        t = Symbol("_t_", positive=True)
+        scaled = expr.subs([(v, t * v) for v in vars_list])
+        if deg > 0:
+            is_hom = bool(simplify(scaled - t**deg * expr) == 0)
+    except Exception:
+        pass
+
+    hom = "Homogeneous" if is_hom else "Inhomogeneous"
+
+    # Curve/surface/variety classification
+    if n == 1:
+        cls = "Single-variable — polynomial equation, finitely many roots"
+    elif n == 2 and deg == 1:
+        cls = "Linear Diophantine — solutions form an arithmetic progression"
+    elif n == 2 and deg == 2:
+        cls = "Conic — genus 0; parametrised by ℚ whenever one rational point exists"
+    elif n == 2 and deg == 3:
+        cls = "Elliptic curve — genus 1; E(ℚ) ≅ ℤʳ ⊕ T (Mordell-Weil)"
+    elif n == 2 and deg >= 4:
+        g = (deg - 1) * (deg - 2) // 2
+        cls = f"Plane curve, genus ≤ {g}; finitely many rational points if genus ≥ 2 (Faltings)"
+    elif n == 3 and deg == 2:
+        cls = "Quadric surface — genus 0; rational points dense if any exist (Hasse-Minkowski)"
+    elif n == 3 and deg == 3:
+        cls = "Cubic surface — 27 lines over ℂ; conjecturally dense rational points"
+    elif n == 3 and deg == 4:
+        cls = "Quartic surface — K3 if smooth; rational points potentially dense"
+    elif n == 4 and deg == 3:
+        cls = "Cubic threefold — rational points expected dense (n=4 > 2d=6? No, 4<6 — borderline)"
+    else:
+        cls = f"{n}-variable degree-{deg} Diophantine equation"
+
+    cards.append({
+        "headline": f"{n} var{'s' if n != 1 else ''}, degree {deg} — {cls[:70]}{'…' if len(cls) > 70 else ''}",
+        "body": (
+            f"Variables: {', '.join(var_names)}. "
+            f"Total degree: {deg}. {hom}. "
+            f"{cls}."
+        ),
+        "intuition": (
+            "Degree d and variable count n are the two fundamental invariants. "
+            "They determine the geometric genus, which theorems apply, and how many solutions to expect. "
+            "Homogeneity means scaling all variables multiplies the LHS by λᵈ — "
+            "solutions come in scaling families, so search for primitive (gcd=1) solutions."
+        ),
+    })
+
+    # Circle method heuristic (n ≥ 3, deg ≥ 2)
+    if n >= 3 and deg >= 2:
+        if n > 2 * deg:
+            cm = (f"n={n} > 2d={2*deg}: major arcs dominate. "
+                  f"Expect ~H^{n - deg} solutions with max|x_i| ≤ H.")
+            cm_proved = "Proved asymptotic (Birch 1962 for non-singular)."
+        elif n == 2 * deg:
+            cm = (f"n={n} = 2d={2*deg}: borderline. "
+                  f"Expect ~H^{n - deg}·(log H)^c solutions.")
+            cm_proved = "Logarithmic corrections; more delicate analysis needed."
+        else:
+            cm = (f"n={n} < 2d={2*deg}: major arcs do NOT dominate. "
+                  "Solutions may be sparse even without local obstructions.")
+            cm_proved = "Circle method insufficient; geometry-of-numbers or descent required."
+
+        cards.append({
+            "headline": "Hardy-Littlewood circle method prediction",
+            "body": f"{cm} {cm_proved}",
+            "formula": (
+                f"N(H) ~ C · H^{n - deg}  (conjectured for n ≤ 2d; proved for n > 2d)\n"
+                f"where C = singular series × singular integral > 0 iff no local obstruction"
+            ),
+            "intuition": (
+                "The circle method writes the count as an integral on ℝ/ℤ. "
+                "Near rational p/q with small denominator (major arcs), contributions are large and explicit. "
+                "Away from rationals (minor arcs), they cancel. "
+                "When n > 2d, major arcs win by a power saving — giving a proved asymptotic."
+            ),
+        })
+
+    return {"id": "profile", "title": "Equation Profile", "icon": "≡", "cards": cards}
+
+
+def _explore_obstruction_section(expr, var_syms, param_name):
+    from itertools import product as iprod
+
+    vars_list = list(var_syms.values())
+    var_names = list(var_syms.keys())
+    n = len(vars_list)
+
+    # Performance guard: skip large moduli for many variables
+    def _moduli_for(nv):
+        if nv <= 3:
+            return [3, 4, 7, 8, 9]
+        if nv == 4:
+            return [3, 4, 7, 9]
+        return [3, 4, 7]
+
+    moduli = _moduli_for(n)
+    fn = _explore_eval_fast(expr, vars_list)
+
+    obs_found = []
+    for m in moduli:
+        if param_name and param_name in var_names:
+            param_idx = var_names.index(param_name)
+            attainable = set()
+            try:
+                for vals in iprod(range(m), repeat=n):
+                    try:
+                        if round(fn(*vals)) % m == 0:
+                            attainable.add(vals[param_idx])
+                    except Exception:
+                        pass
+            except Exception:
+                continue
+            blocked = sorted(r for r in range(m) if r not in attainable)
+            if blocked:
+                obs_found.append({
+                    "mod": m, "type": "param",
+                    "param": param_name,
+                    "blocked": blocked,
+                    "attainable": sorted(attainable),
+                })
+        else:
+            has_sol = False
+            try:
+                for vals in iprod(range(m), repeat=n):
+                    try:
+                        if round(fn(*vals)) % m == 0:
+                            has_sol = True
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                continue
+            if not has_sol:
+                obs_found.append({"mod": m, "type": "global"})
+                break  # one global obstruction is a complete proof
+
+    cards = []
+    if not obs_found:
+        cards.append({
+            "headline": "No congruence obstructions found (mod 3, 4, 7, 8, 9)",
+            "body": (
+                "The equation has solutions modulo every tested modulus. "
+                "No elementary congruence argument prevents integer solutions. "
+                "Higher p-adic or real obstructions may still exist."
+            ),
+            "formula": "∀ p ∈ {3,4,7,8,9}:  ∃ solution mod p",
+            "intuition": (
+                "Passing all local tests is necessary (but NOT sufficient) for a global solution. "
+                "For quadrics: sufficiency holds (Hasse-Minkowski theorem). "
+                "For higher degree: the Brauer-Manin obstruction can block global solutions "
+                "even when every local test passes — a phenomenon first found by Selmer (1951)."
+            ),
+        })
+    else:
+        for obs in obs_found:
+            if obs["type"] == "global":
+                cards.append({
+                    "headline": f"Global obstruction mod {obs['mod']}: provably NO integer solutions exist",
+                    "body": (
+                        f"The equation has no solutions in (ℤ/{obs['mod']}ℤ)ⁿ. "
+                        "Every integer solution would reduce to a modular solution by taking remainders. "
+                        f"Therefore, no integer solution can exist — this is a complete, unconditional proof."
+                    ),
+                    "formula": f"f(x₁,...,xₙ) ≢ 0 (mod {obs['mod']})  ⟹  no integer solution exists",
+                    "intuition": (
+                        "This is the cheapest impossibility proof in all of mathematics: "
+                        "a finite computation over {0,...," + str(obs['mod'] - 1) + "}ⁿ. "
+                        "Once found, no further work is needed — no solutions of any kind exist."
+                    ),
+                })
+            else:
+                blocked_str = ", ".join(str(b) for b in obs["blocked"])
+                attain_str = ", ".join(str(a) for a in obs["attainable"])
+                cards.append({
+                    "headline": (
+                        f"Obstruction mod {obs['mod']}: "
+                        f"{obs['param']} ≡ {{{blocked_str}}} (mod {obs['mod']}) → no solution"
+                    ),
+                    "body": (
+                        f"When {obs['param']} ≡ {{{blocked_str}}} (mod {obs['mod']}), "
+                        f"there is provably no integer solution. "
+                        f"Values of {obs['param']} mod {obs['mod']} that DO have solutions: "
+                        f"{{{attain_str}}}."
+                    ),
+                    "formula": (
+                        f"{obs['param']} ≡ {{{blocked_str}}} (mod {obs['mod']})"
+                        f"  ⟹  no integer (x₁,...,xₙ) satisfies the equation"
+                    ),
+                    "intuition": (
+                        "This is a p-adic obstruction: the equation has no solution in ℤ_"
+                        + str(obs['mod'])
+                        + " (the " + str(obs['mod']) + "-adic integers). "
+                        "It is unconditional — no computation or search can produce a counterexample."
+                    ),
+                })
+
+    return {"id": "obstruction", "title": "Congruence Obstructions", "icon": "≢", "cards": cards}
+
+
+def _explore_search_section(expr, var_syms, param_name, bound):
+    from itertools import product as iprod
+
+    vars_list = list(var_syms.values())
+    var_names = list(var_syms.keys())
+    n = len(vars_list)
+
+    # Scale bound to keep iterations manageable
+    MAX_ITERS = 400_000
+    eff = min(bound, max(3, int(MAX_ITERS ** (1.0 / n)) // 2))
+    total = (2 * eff + 1) ** n
+
+    fn = _explore_eval_fast(expr, vars_list)
+    solutions = []
+    param_groups = {}  # param_val → [sol, ...]
+    param_idx = var_names.index(param_name) if param_name and param_name in var_names else None
+
+    try:
+        rng = range(-eff, eff + 1)
+        for vals in iprod(rng, repeat=n):
+            try:
+                v = fn(*vals)
+                if isinstance(v, float):
+                    if abs(v) > 0.5:
+                        continue
+                elif int(round(v)) != 0:
+                    continue
+            except Exception:
+                continue
+            sol = dict(zip(var_names, vals))
+            solutions.append(sol)
+            if param_idx is not None:
+                pv = vals[param_idx]
+                param_groups.setdefault(pv, []).append(sol)
+            if len(solutions) >= 120:
+                break
+    except Exception:
+        pass
+
+    cards = []
+    if not solutions:
+        cards.append({
+            "headline": f"No solutions in [−{eff}, {eff}]^{n}  ({total:,} combinations checked)",
+            "body": (
+                f"Searched all {total:,} combinations of {n} variables in [−{eff}, {eff}]. "
+                "Possible reasons: "
+                "(1) A congruence obstruction provably eliminates all solutions. "
+                "(2) Solutions exist but outside the searched range — "
+                "e.g. the smallest solution of x³+y³+z³=42 has |x|,|y|,|z| up to ~10¹⁴. "
+                "(3) The equation has no integer solutions."
+            ),
+            "intuition": (
+                "Negative search results are informative but not conclusive. "
+                "A congruence obstruction (see above) is a complete proof of impossibility. "
+                "Absence of small solutions is only evidence for rank 0 or large generator height."
+            ),
+        })
+    else:
+        if param_idx is not None and param_groups:
+            pvals = sorted(param_groups.keys())
+            sample_str = ", ".join(str(v) for v in pvals[:12])
+            extra = f" (+{len(pvals) - 12} more)" if len(pvals) > 12 else ""
+            cards.append({
+                "headline": (
+                    f"{len(solutions)} solution{'s' if len(solutions) != 1 else ''} found — "
+                    f"{len(pvals)} value{'s' if len(pvals) != 1 else ''} of {param_name} "
+                    f"in [−{eff}, {eff}]"
+                ),
+                "body": (
+                    f"Search range: [−{eff}, {eff}] per variable ({total:,} combinations). "
+                    f"{param_name} values with solutions: {{{sample_str}{extra}}}."
+                ),
+                "intuition": (
+                    "These are the small solutions. "
+                    "Larger solutions exist if the curve has rank ≥ 1 or the family has infinite structure. "
+                    "Check the obstruction section to see which parameter values are provably excluded."
+                ),
+            })
+            # Per-param breakdown (first 8 parameter values)
+            for pv in pvals[:8]:
+                sols = param_groups[pv][:4]
+                free_vars = [k for k in var_names if k != param_name]
+                sols_str = "; ".join(
+                    "(" + ", ".join(f"{k}={s[k]}" for k in free_vars) + ")"
+                    for s in sols
+                )
+                more = f" (+{len(param_groups[pv]) - 4} more)" if len(param_groups[pv]) > 4 else ""
+                cards.append({
+                    "headline": f"{param_name} = {pv}:  {sols_str}{more}",
+                    "body": (
+                        f"For {param_name} = {pv}, found {len(param_groups[pv])} solution(s): "
+                        f"{sols_str}."
+                    ),
+                })
+        else:
+            rows = [
+                "(" + ", ".join(f"{k}={v}" for k, v in s.items()) + ")"
+                for s in solutions[:16]
+            ]
+            extra = f" (+{len(solutions) - 16} more)" if len(solutions) > 16 else ""
+            cards.append({
+                "headline": f"{len(solutions)} solution{'s' if len(solutions) != 1 else ''} in [−{eff}, {eff}]^{n}",
+                "body": f"Found: {'; '.join(rows)}{extra}.",
+                "intuition": "These are the smallest integer solutions by coordinate magnitude.",
+            })
+
+    return {"id": "search", "title": "Small Solutions (Experimental)", "icon": "∃", "cards": cards}
+
+
+def _explore_structure_section(expr, var_syms, param_name):
+    from sympy import Poly, expand, total_degree, Symbol, simplify
+
+    vars_list = list(var_syms.values())
+    var_names = list(var_syms.keys())
+    n = len(vars_list)
+    cards = []
+
+    try:
+        expanded = expand(expr)
+        deg = total_degree(expanded, *vars_list)
+        poly = Poly(expanded, *vars_list)
+        monoms = poly.monoms()   # list of tuples of exponents
+        coeffs = [int(c) for c in poly.coeffs()]
+        monom_dict = dict(zip(monoms, coeffs))
+    except Exception:
+        return {"id": "structure", "title": "Mathematical Structure", "icon": "≅", "cards": cards}
+
+    # ── Sum-of-powers detection ──────────────────────────────────────────
+    pure_power_monoms = [
+        tuple(deg if i == j else 0 for i in range(n))
+        for j in range(n)
+    ]
+    all_pure = all(
+        m == tuple(0 for _ in range(n)) or m in pure_power_monoms
+        for m in monoms
+    )
+
+    if all_pure and deg >= 2:
+        active_vars = [var_names[j] for j, pp in enumerate(pure_power_monoms) if pp in monom_dict]
+        signs = [monom_dict[pp] for pp in pure_power_monoms if pp in monom_dict]
+        const = monom_dict.get(tuple(0 for _ in range(n)), 0)
+
+        if n == 3 and deg == 3 and param_name:
+            # Check it looks like x³+y³+z³=k
+            free_vars_active = [v for v in var_names if v != param_name]
+            if len(free_vars_active) >= 2:
+                cards.append({
+                    "headline": "Sum of Three Cubes: x³ + y³ + z³ = k",
+                    "body": (
+                        "One of the most studied unsolved problems in number theory. "
+                        "The only proven obstruction: k ≡ 4 or 5 (mod 9) → no solution exists. "
+                        "All other k are expected to have solutions (conjectured but unproved). "
+                        "Recent breakthroughs: k=33 (Booker 2019), k=42 (Booker-Sutherland 2019), "
+                        "k=114 and k=390 (2024). The smallest unsolved eligible k < 1000 is k=114 "
+                        "(now solved) and k=579."
+                    ),
+                    "formula": (
+                        "k ≡ 4 or 5 (mod 9)  ⟹  no solution\n"
+                        "Conjectured: all other k have infinitely many solutions\n"
+                        "Expected density: #solutions with |x|,|y|,|z| ≤ H ~ C · log H"
+                    ),
+                    "intuition": (
+                        "The mod 9 obstruction is the ONLY known obstruction. "
+                        "The extremely slow logarithmic growth means solutions for large k can be "
+                        "astronomically large — yet computers now search up to |x| ~ 10²¹ using "
+                        "Elkies' algorithm and massive parallelism."
+                    ),
+                })
+
+        elif deg == 2 and all(s > 0 for s in signs):
+            # Sum of squares
+            k = len(active_vars)
+            if k == 2 and not param_name:
+                cards.append({
+                    "headline": "Sum of two squares: x² + y² = n",
+                    "body": (
+                        "An integer n is expressible as x²+y² if and only if "
+                        "every prime p ≡ 3 (mod 4) appears to an even power in the factorisation of n. "
+                        "The number of representations is r₂(n) = 4(d₁(n) − d₃(n)), "
+                        "where d₁ counts divisors ≡ 1 (mod 4) and d₃ counts those ≡ 3 (mod 4)."
+                    ),
+                    "formula": "r₂(n) = 4·(#{d|n : d≡1 mod 4} − #{d|n : d≡3 mod 4})",
+                    "intuition": (
+                        "The Gaussian integers ℤ[i] explain this completely: "
+                        "n = x²+y² = |x+iy|² means n factors in ℤ[i]. "
+                        "Primes p ≡ 1 (mod 4) split in ℤ[i]; primes p ≡ 3 (mod 4) remain prime."
+                    ),
+                })
+            elif k >= 3 and const != 0:
+                cards.append({
+                    "headline": f"Waring's problem for squares — {k} summands",
+                    "body": (
+                        f"Lagrange (1770): every positive integer is a sum of 4 squares (W(2) = 4). "
+                        f"Legendre: 3 squares suffice except for 4^a(8b+7). "
+                        f"For {k} ≥ 4 squares, every positive integer is representable."
+                    ),
+                    "formula": "W(2) = 4:  ∀n > 0, n = x₁² + x₂² + x₃² + x₄²",
+                    "intuition": "Lagrange's four-square theorem is proved via the quaternion identity: (a²+b²+c²+d²)(e²+f²+g²+h²) = sum of 4 squares.",
+                })
+
+        elif deg == 3 and n == 3 and not param_name:
+            # All ±x³: check for Fermat-like structure
+            if all(abs(c) == 1 for c in signs) and len(active_vars) == 3:
+                pos = sum(1 for s in signs if s > 0)
+                neg = sum(1 for s in signs if s < 0)
+                if pos == 2 and neg == 1:
+                    cards.append({
+                        "headline": "Fermat's Last Theorem (n=3): x³ + y³ = z³",
+                        "body": (
+                            "Fermat's Last Theorem for exponent 3: no positive integer solution. "
+                            "First proved by Euler (1770), using the ring ℤ[ω] where ω = e^(2πi/3). "
+                            "Euler's proof had a gap (unique factorisation in ℤ[ω]), "
+                            "later completed by Gauss. "
+                            "The general case (all n ≥ 3) was proved by Wiles (1995)."
+                        ),
+                        "formula": "x³ + y³ = z³  has no solution in ℤ>0  (Euler/Wiles)",
+                        "intuition": (
+                            "The key insight for n=3: work in ℤ[ω] which has unique factorisation. "
+                            "An infinite descent argument then shows the equation is impossible. "
+                            "For n ≥ 5, Wiles used modular forms (a completely different approach)."
+                        ),
+                    })
+
+    # ── Pell / quadratic detection ───────────────────────────────────────
+    if n == 2 and deg == 2:
+        x_s, y_s = vars_list
+        try:
+            p = Poly(expanded, x_s, y_s)
+            c_xx = int(p.nth(2, 0))
+            c_yy = int(p.nth(0, 2))
+            c_xy = int(p.nth(1, 1))
+            c_0 = int(p.nth(0, 0))
+
+            if c_xy == 0 and c_xx == 1 and c_yy < 0:
+                D = -c_yy
+                N = -c_0
+                if N == 1:
+                    cards.append({
+                        "headline": f"Pell equation: x² − {D}y² = 1",
+                        "body": (
+                            f"The Pell equation x² − {D}y² = 1 has infinitely many solutions "
+                            f"(since {D} is {'not ' if int(D**0.5)**2 != D else ''}a perfect square). "
+                            "The fundamental solution (x₁,y₁) generates all others via: "
+                            f"xₙ + yₙ√{D} = (x₁ + y₁√{D})ⁿ for n ∈ ℤ."
+                        ),
+                        "formula": f"All solutions: xₙ + yₙ√{D} = (x₁ + y₁√{D})ⁿ",
+                        "intuition": (
+                            f"The fundamental solution comes from the continued fraction of √{D}. "
+                            "Pell equations connect to units in real quadratic number fields ℚ(√D): "
+                            "solutions correspond to units of norm 1 in ℤ[√D]."
+                        ),
+                    })
+                else:
+                    cards.append({
+                        "headline": f"Generalized Pell: x² − {D}y² = {N}",
+                        "body": (
+                            f"Unlike the standard Pell equation (N=1), x² − {D}y² = {N} "
+                            "may have zero, finitely many, or infinitely many solutions. "
+                            "Solutions split into finitely many equivalence classes, "
+                            "each generating an infinite family via the Pell group action."
+                        ),
+                        "intuition": "Solve via LLL/continued fractions, then apply the Pell group action to generate all solutions from finitely many base solutions.",
+                    })
+        except Exception:
+            pass
+
+    # ── Mordell / Weierstrass detection ──────────────────────────────────
+    if n == 2 and deg == 3:
+        for a_s, b_s in [(vars_list[0], vars_list[1]), (vars_list[1], vars_list[0])]:
+            try:
+                pb = Poly(expanded, b_s)
+                if pb.degree() == 2:
+                    c2 = int(pb.nth(2))
+                    c1 = int(pb.nth(1))
+                    c0 = pb.nth(0)
+                    if c1 == 0 and abs(c2) == 1:
+                        pa = Poly(expand(-c0), a_s)
+                        if pa.degree() == 3:
+                            cards.append({
+                                "headline": "Elliptic curve in Weierstrass form",
+                                "body": (
+                                    "This is an elliptic curve y² = f(x) (or x² = f(y)). "
+                                    "The rational points form a finitely generated abelian group E(ℚ) ≅ ℤʳ ⊕ T. "
+                                    "The rank r ∈ {0,1,2,...} determines whether there are finitely (r=0) or "
+                                    "infinitely many (r≥1) rational points."
+                                ),
+                                "formula": "E(ℚ) ≅ ℤʳ ⊕ T,   T ∈ {15 possibilities} (Mazur 1977)",
+                                "intuition": (
+                                    "Use the Solver with the Mathematician's Lens for deep analysis. "
+                                    "The LMFDB (lmfdb.org) has the complete arithmetic profile "
+                                    "of every elliptic curve over ℚ with small conductor."
+                                ),
+                            })
+                            break
+            except Exception:
+                pass
+
+    # ── Pythagorean triple detection ──────────────────────────────────────
+    if n == 3 and deg == 2:
+        try:
+            p = Poly(expanded, *vars_list)
+            ms = p.monoms()
+            pure2 = [tuple(2 if i == j else 0 for i in range(3)) for j in range(3)]
+            if all(m in pure2 or m == (0, 0, 0) for m in ms):
+                cs = [int(p.nth(*pp)) for pp in pure2]
+                pos_cs = [c for c in cs if c > 0]
+                neg_cs = [c for c in cs if c < 0]
+                if len(pos_cs) == 2 and len(neg_cs) == 1 and all(abs(c) == 1 for c in cs if c != 0):
+                    cards.append({
+                        "headline": "Pythagorean triple equation: x² + y² = z²",
+                        "body": (
+                            "Complete parametrisation: all primitive Pythagorean triples are "
+                            "(m²−n², 2mn, m²+n²) for gcd(m,n)=1, m>n>0, m−n odd. "
+                            "Infinitely many solutions exist. "
+                            "The rational points on the unit circle x²+y²=z² are dense."
+                        ),
+                        "formula": "(x,y,z) = k·(m²−n², 2mn, m²+n²),  m>n>0, gcd(m,n)=1, m−n odd",
+                        "intuition": "Stereographic projection from (−1,0,0) maps the unit circle to the rational line ℚ, giving the complete parametrisation. This is the simplest instance of the 'rational points on a conic via a known point' method.",
+                    })
+        except Exception:
+            pass
+
+    # ── Markov equation ───────────────────────────────────────────────────
+    try:
+        p = Poly(expanded, *vars_list)
+        if n == 3 and deg == 3:
+            # Check for x²+y²+z²-3xyz=0 pattern
+            ps = {m: int(c) for m, c in zip(p.monoms(), p.coeffs())}
+            pure2 = {tuple(2 if i == j else 0 for i in range(3)) for j in range(3)}
+            cubic_xyz = tuple(sorted([(1, 0, 2), (0, 1, 2), (2, 1, 0), (2, 0, 1), (0, 2, 1), (1, 2, 0)]))
+            # x²y is (2,1,0) etc. 3xyz is coefficient -3 on (1,1,1)
+            if frozenset(ps.keys()) <= {(2, 0, 0), (0, 2, 0), (0, 0, 2), (1, 1, 1)}:
+                sq_coeffs = {ps.get((2, 0, 0), 0), ps.get((0, 2, 0), 0), ps.get((0, 0, 2), 0)}
+                xyz_c = ps.get((1, 1, 1), 0)
+                if sq_coeffs == {1} and xyz_c == -3:
+                    cards.append({
+                        "headline": "Markov equation: x² + y² + z² = 3xyz",
+                        "body": (
+                            "The Markov equation generates the Markov tree: "
+                            "starting from (1,1,1) and applying (x,y,z)→(3yz−x, y, z), "
+                            "every Markov triple is reachable. "
+                            "The Markov uniqueness conjecture (Frobenius 1913, still open!) "
+                            "asks: is each Markov number the largest element of a unique triple?"
+                        ),
+                        "formula": "Markov tree: (x,y,z) → (3yz−x, y, z) generates infinitely many solutions",
+                        "intuition": (
+                            "Markov triples are related to Farey sequences, "
+                            "hyperbolic geometry, and the theory of quadratic forms. "
+                            "The uniqueness conjecture has been verified up to Markov numbers ~10¹⁸⁰ "
+                            "but remains one of the most stubborn open problems in number theory."
+                        ),
+                    })
+    except Exception:
+        pass
+
+    # ── Homogeneity note ──────────────────────────────────────────────────
+    try:
+        t = Symbol("_t_")
+        scaled = expr.subs([(v, t * v) for v in vars_list])
+        if deg > 0 and bool(simplify(scaled - t**deg * expr) == 0):
+            cards.append({
+                "headline": "Homogeneous equation — projective symmetry",
+                "body": (
+                    "f(λx₁,...,λxₙ) = λᵈ f(x₁,...,xₙ). "
+                    "Scaling all variables by λ multiplies the LHS by λᵈ. "
+                    "If (x₁,...,xₙ) is a solution, so is (λx₁,...,λxₙ) for any λ ∈ ℤ. "
+                    "The natural domain is projective space ℙⁿ⁻¹(ℚ): "
+                    "look for primitive integer solutions (gcd(x₁,...,xₙ)=1)."
+                ),
+                "formula": "f(λx₁,...,λxₙ) = λᵈ · f(x₁,...,xₙ)   ⟹  solutions closed under scaling",
+                "intuition": "Projective solutions over ℚ correspond to primitive integer points up to sign. This reduces the search space and makes the problem purely projective geometry.",
+            })
+    except Exception:
+        pass
+
+    if not cards:
+        cards.append({
+            "headline": "Polynomial Diophantine equation",
+            "body": (
+                "This is a polynomial equation in integer unknowns. "
+                "Structure depends on degree, variable count, and coefficient patterns. "
+                "For degree ≤ 2: classical results (conics, quadrics) are complete. "
+                "For degree ≥ 3 with ≥ 2 variables: each family requires its own toolkit."
+            ),
+            "intuition": "The 'right' framework is determined by genus (for curves) or Kodaira dimension (for surfaces). Both require algebraic geometry to compute rigorously.",
+        })
+
+    return {"id": "structure", "title": "Mathematical Structure", "icon": "≅", "cards": cards}
+
+
+def _explore_literature_section(expr, var_syms, param_name):
+    from sympy import total_degree, expand
+
+    vars_list = list(var_syms.values())
+    var_names = list(var_syms.keys())
+    n = len(vars_list)
+    cards = []
+
+    try:
+        deg = total_degree(expand(expr), *vars_list)
+    except Exception:
+        deg = -1
+
+    # Hasse principle + Brauer-Manin
+    cards.append({
+        "headline": "The Hasse principle and when it fails",
+        "body": (
+            "The Hasse principle: does local solvability (real + p-adic for all p) imply global? "
+            "For quadrics: YES (Hasse-Minkowski, 1923). "
+            "For cubics: NOT IN GENERAL. Selmer's cubic 3x³+4y³+5z³=0 has local solutions everywhere "
+            "but no rational point (1951). "
+            "The Brauer-Manin obstruction (Manin 1970) explains most known failures: "
+            "the Brauer group Br(X) provides an obstruction map from local adelic points to ℚ/ℤ."
+        ),
+        "formula": "X(ℚ) ⊆ X(𝔸ℚ)^{Br}  ⊆  X(ℚp) × X(ℝ)  for all p",
+        "intuition": (
+            "Brauer-Manin is the most powerful known obstruction beyond congruences. "
+            "For smooth cubic surfaces, it is conjectured to be the ONLY obstruction "
+            "(weak approximation). For higher degree, counterexamples to Brauer-Manin "
+            "being the only obstruction are known (Skorobogatov 1999)."
+        ),
+    })
+
+    if n >= 3 and deg == 3:
+        cards.append({
+            "headline": "Exponential sums and the circle method (Hardy-Littlewood-Vinogradov)",
+            "body": (
+                "The circle method writes the number of solutions as an integral over ℝ/ℤ "
+                "of exponential sums e^{2πif(x)/q}. "
+                "For the sum-of-cubes equation with n ≥ 9 terms, Waring's problem is fully solved: "
+                "every integer is a sum of 9 cubes (proved) and 7 cubes suffice for all but finitely many n. "
+                "For n=3 cubes, the circle method gives only partial results."
+            ),
+            "intuition": "The exponential sum S(α) = Σ_x e^{2πiαx³} is the key object. Its L²-norm equals the count of solutions. Major arcs (|α − a/q| small) give the main term; minor arcs are bounded by Weyl estimates.",
+        })
+
+    if n == 2 and deg >= 3:
+        cards.append({
+            "headline": "Thue equations (homogeneous, 2 variables, deg ≥ 3)",
+            "body": (
+                "If the equation is homogeneous in x,y of degree ≥ 3 (Thue equation F(x,y)=c): "
+                "Thue (1909) proved finitely many solutions. "
+                "Baker's method (1966) via linear forms in logarithms gives effective bounds. "
+                "Algorithms exist (Bilu-Hanrot, Tzanakis-de Weger) to find ALL solutions computationally."
+            ),
+            "formula": "F(x,y) = c,  F irred., deg ≥ 3  ⟹  finitely many (x,y) ∈ ℤ²  (Thue 1909)",
+            "intuition": (
+                "Thue's finiteness is proved via Roth's theorem: algebraic numbers can't be "
+                "well-approximated by rationals (|α − p/q| > 1/q^{2+ε}). "
+                "If the Thue equation had many solutions, it would give too-good rational approximations."
+            ),
+        })
+
+    cards.append({
+        "headline": "Baker's theorem: linear forms in logarithms",
+        "body": (
+            "Baker (1966-1967): for algebraic numbers α₁,...,αₙ and integers b₁,...,bₙ, "
+            "|b₁log α₁ + ... + bₙ log αₙ| > exp(−C(log B)^{n+1}) "
+            "where B = max|bᵢ|. "
+            "This gives effective height bounds for integer points on elliptic curves (Siegel's theorem), "
+            "Thue equations, and many other Diophantine problems. "
+            "Baker received the Fields Medal (1970) for this work."
+        ),
+        "formula": "|Λ| = |b₁log α₁ + ··· + bₙlog αₙ| > exp(−C · (log B)^{n+1})",
+        "intuition": (
+            "Before Baker, finiteness results were non-effective (no computable bound). "
+            "Baker's theorem made them effective: for the first time, one could compute "
+            "an explicit bound H such that all integer solutions satisfy |x|,|y| ≤ H. "
+            "LLL reduction then cuts this astronomical bound to a practical search range."
+        ),
+    })
+
+    cards.append({
+        "headline": "Recommended tools and databases",
+        "body": (
+            "• LMFDB (lmfdb.org) — curves, L-functions, modular forms, number fields. "
+            "• SageMath — free CAS with Diophantine solvers, descent, LMFDB interface. "
+            "• Magma — most comprehensive descent algorithms (commercial). "
+            "• PARI/GP — fast number theory, excellent for Diophantine experimentation. "
+            "• References: Cohen 'Number Theory' I-II; Silverman 'Arithmetic of Elliptic Curves'; "
+            "Smart 'The Algorithmic Resolution of Diophantine Equations'."
+        ),
+        "intuition": "The LMFDB has over 3 million elliptic curves catalogued. Every elliptic curve over ℚ is modular (Wiles 1995) — the LMFDB is the meeting point of arithmetic geometry and analytic number theory.",
+    })
+
+    return {"id": "literature", "title": "Theory & Literature", "icon": "∞", "cards": cards}
+
+
+# ── Equation Explorer endpoint ────────────────────────────────────────────────
+
+@app.route("/api/explore", methods=["POST"])
+def api_explore():
+    """
+    Explore any Diophantine equation: congruence obstructions, small solutions,
+    structural classification, and theory connections — all computed by SymPy.
+
+    Request body (JSON):
+        {
+          "equation": "x**3 + y**3 + z**3 - k"  or  "x**3 + y**3 + z**3 = k",
+          "param":    "k",          # optional: which variable is the RHS parameter
+          "bound":    12            # optional: search bound per variable [3..20]
+        }
+    """
+    import re
+    from sympy import symbols, sympify, expand
+
+    data = request.get_json(silent=True) or {}
+    eq_str = data.get("equation", "").strip()
+    param_name = data.get("param", "").strip()
+    bound = max(3, min(int(data.get("bound", 12)), 20))
+
+    if not eq_str:
+        return jsonify({"ok": False, "error": "No equation provided."}), 400
+
+    try:
+        # Normalise "LHS = RHS" → "LHS - (RHS)"
+        if "=" in eq_str:
+            lhs, rhs = eq_str.split("=", 1)
+            eq_expr_str = f"({lhs.strip()}) - ({rhs.strip()})"
+        else:
+            eq_expr_str = eq_str
+
+        # Auto-detect single-letter variable names
+        raw_names = sorted(set(re.findall(r"\b([a-zA-Z])\b", eq_expr_str)))
+        _SKIP = {"e", "E"}  # avoid confusing with Euler's number
+        raw_names = [n for n in raw_names if n not in _SKIP]
+
+        if not raw_names:
+            return jsonify({"ok": False, "error": "No variables detected. Use single-letter names (x, y, z, k, …)."}), 400
+        if len(raw_names) > 6:
+            return jsonify({"ok": False, "error": f"Too many variables ({len(raw_names)}). Maximum 6."}), 400
+
+        var_syms = {name: symbols(name, integer=True) for name in raw_names}
+
+        try:
+            expr = sympify(eq_expr_str, locals=var_syms)
+            expr = expand(expr)
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"Could not parse equation: {exc}"}), 400
+
+        if param_name and param_name not in var_syms:
+            param_name = ""
+
+        sections = [
+            _explore_profile_section(expr, var_syms),
+            _explore_obstruction_section(expr, var_syms, param_name),
+            _explore_search_section(expr, var_syms, param_name, bound),
+            _explore_structure_section(expr, var_syms, param_name),
+            _explore_literature_section(expr, var_syms, param_name),
+        ]
+
+        return jsonify({
+            "ok": True,
+            "sections": sections,
+            "vars": raw_names,
+            "param": param_name,
+        })
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5001))

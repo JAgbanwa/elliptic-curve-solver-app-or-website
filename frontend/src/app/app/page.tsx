@@ -1328,6 +1328,7 @@ ${tableRows}
           </Link>
           <nav className="header-nav">
             <Link className="nav-link" href="/">Home</Link>
+            <Link className="nav-link" href="/explore">Explore</Link>
             <a className="btn-github" href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website" target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:"5px",textDecoration:"none"}}>
               <GithubIcon /> GitHub
             </a>
