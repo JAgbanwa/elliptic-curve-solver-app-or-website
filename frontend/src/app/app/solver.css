@@ -199,6 +199,7 @@
 }
 .btn-ghost:hover:not(:disabled) { border-color: var(--text); }
 .btn-ghost:disabled { opacity: .35; cursor: not-allowed; }
+.btn-ghost.btn-active { background: var(--text); color: var(--bg); border-color: var(--text); }
 .btn-sm { padding: 4px 9px; font-size: .68rem; }
 .btn-xs { padding: 2px 7px; font-size: .65rem; }
 .btn-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
@@ -309,9 +310,19 @@ tbody tr:hover { background: var(--surface); }
 }
 #curve-canvas { display: block; max-width: 100%; cursor: crosshair; }
 .plot-legend {
-  position: absolute; bottom: 6px; right: 8px;
-  display: flex; gap: 12px; font-size: .65rem; color: var(--text-dim);
-  font-family: var(--font-mono);
+  display: flex; gap: 14px; font-size: .65rem; color: var(--text-dim);
+  font-family: var(--font-mono); padding: 4px 10px 2px; flex-wrap: wrap; align-items: center;
+}
+.plot-legend-item { display: flex; align-items: center; gap: 5px; }
+.plot-legend-swatch-sq {
+  width: 9px; height: 9px;
+  background: var(--text); border: 1.5px solid #2563eb;
+  display: inline-block; flex-shrink: 0;
+}
+.plot-legend-swatch-circ {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid #2563eb; background: rgba(37,99,235,.1);
+  display: inline-block; flex-shrink: 0;
 }
 .plot-legend-points { color: var(--red); }
 .plot-caption { font-size: .68rem; color: var(--text-dim); padding: 5px 10px 7px; text-align: center; font-family: var(--font-mono); }

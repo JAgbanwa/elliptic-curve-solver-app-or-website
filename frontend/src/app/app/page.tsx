@@ -434,6 +434,9 @@ export default function SolverPage() {
   const [groupLawResult, setGroupLawResult] = useState("");
   const [glP, setGlP] = useState("O");
   const [glQ, setGlQ] = useState("O");
+  const [showSymmetry, setShowSymmetry] = useState(false);
+  const [showConstruction, setShowConstruction] = useState(false);
+  const [groupLawPoint, setGroupLawPoint] = useState<{x: number, y: number} | null>(null);
 
   /* ── UI state ─────────────────────────────────────────────────────────── */
   const [showHistory, setShowHistory] = useState(false);
@@ -466,6 +469,11 @@ export default function SolverPage() {
   const plotDataRef   = useRef<any>(null);
   const showLabelsRef = useRef(true);
   const filterRef     = useRef<"all"|"integer"|"rational">("all");
+  const showSymmetryRef    = useRef(false);
+  const showConstructionRef = useRef(false);
+  const groupLawPointRef   = useRef<{x: number, y: number} | null>(null);
+  const glPRef = useRef("O");
+  const glQRef = useRef("O");
 
   /* ── Apply font preference to entire page ────────────────────────────── */
   useEffect(() => {
@@ -490,6 +498,10 @@ export default function SolverPage() {
   useEffect(() => { plotDataRef.current = plotData; }, [plotData]);
   useEffect(() => { showLabelsRef.current = showLabels; }, [showLabels]);
   useEffect(() => { filterRef.current = pointFilter; }, [pointFilter]);
+  useEffect(() => { showSymmetryRef.current = showSymmetry; }, [showSymmetry]);
+  useEffect(() => { showConstructionRef.current = showConstruction; }, [showConstruction]);
+  useEffect(() => { glPRef.current = glP; }, [glP]);
+  useEffect(() => { glQRef.current = glQ; }, [glQ]);
 
   /* ── Load persisted data on mount ────────────────────────────────────── */
   useEffect(() => {
@@ -1047,25 +1059,111 @@ export default function SolverPage() {
       const ii = isInt(s.x) && isInt(s.y);
       return f === "integer" ? ii : !ii;
     });
+
+    /* ── Symmetry mirror (y → −y) ── */
+    if (showSymmetryRef.current) {
+      if (y_min < 0 && 0 < y_max) {
+        const ay = ty(0);
+        ctx.strokeStyle = darkMode ? "#f59e0b" : "#d97706";
+        ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+        ctx.beginPath(); ctx.moveTo(PAD.L, ay); ctx.lineTo(PAD.L+PW, ay); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.globalAlpha = 0.32;
+      for (const { x, y } of visSols) {
+        const fx = parseFloat(String(x)), fy = parseFloat(String(y));
+        if (!Number.isFinite(fx) || !Number.isFinite(fy) || fy === 0) continue;
+        const rpx = tx(fx), rpy = ty(-fy);
+        if (rpy < PAD.T || rpy > PAD.T+PH) continue;
+        ctx.strokeStyle = darkMode ? "#60a5fa" : "#9ca3af"; ctx.lineWidth = 1; ctx.setLineDash([2,3]);
+        ctx.beginPath(); ctx.moveTo(tx(fx), ty(fy)); ctx.lineTo(rpx, rpy); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = darkMode ? "#60a5fa" : "#9ca3af";
+        ctx.beginPath(); ctx.arc(rpx, rpy, 3, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    /* ── Points: integer (■) vs rational (○) ── */
     for (const { x, y } of visSols) {
       const fx = parseFloat(String(x)), fy = parseFloat(String(y));
       if (!Number.isFinite(fx) || !Number.isFinite(fy)) continue;
       const px = tx(fx), py = ty(fy);
-      ctx.fillStyle = "#ef4444"; ctx.strokeStyle = darkMode ? "#161b22" : "#fff"; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(px,py,6,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      const isIntPt = isInt(x) && isInt(y);
+      if (isIntPt) {
+        const sz = 8;
+        ctx.fillStyle = darkMode ? "#f0f6fc" : "#111827";
+        ctx.strokeStyle = darkMode ? "#60a5fa" : "#2563eb"; ctx.lineWidth = 1.5;
+        ctx.fillRect(px-sz/2, py-sz/2, sz, sz); ctx.strokeRect(px-sz/2, py-sz/2, sz, sz);
+      } else {
+        ctx.strokeStyle = darkMode ? "#60a5fa" : "#2563eb";
+        ctx.fillStyle = darkMode ? "rgba(96,165,250,0.15)" : "rgba(37,99,235,0.08)";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      }
       if (showLabelsRef.current) {
         const label = `(${fmtNum(fx)}, ${fmtNum(fy)})`;
         ctx.font = "bold 11px sans-serif";
         const tw = ctx.measureText(label).width;
-        let lx = px+8, ly = py-10;
-        if (lx+tw+4 > PAD.L+PW) lx = px-tw-8;
-        ctx.fillStyle = darkMode ? "rgba(22,27,34,.82)" : "rgba(255,255,255,.82)";
-        ctx.fillRect(lx-2,ly-11,tw+4,14);
+        let lx = px+10, ly = py-10;
+        if (lx+tw+4 > PAD.L+PW) lx = px-tw-10;
+        ctx.fillStyle = darkMode ? "rgba(22,27,34,.85)" : "rgba(255,255,255,.85)";
+        ctx.fillRect(lx-2, ly-11, tw+4, 14);
         ctx.fillStyle = darkMode ? "#f0f6fc" : "#111827";
         ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
         ctx.fillText(label, lx, ly);
       }
     }
+
+    /* ── Chord / tangent construction ── */
+    if (showConstructionRef.current && groupLawPointRef.current) {
+      const sols = plotSolsRef.current;
+      const getCoord = (v: string) => {
+        if (v === "O") return null;
+        const i = parseInt(v, 10);
+        if (isNaN(i) || !sols[i]) return null;
+        return { x: parseFloat(String(sols[i].x)), y: parseFloat(String(sols[i].y)) };
+      };
+      const P = getCoord(glPRef.current), Q = getCoord(glQRef.current);
+      const R = groupLawPointRef.current;           // P⊕Q (final reflected result)
+      const Ri = { x: R.x, y: -R.y };              // pre-reflection intersection on curve
+      if (P && Number.isFinite(P.x) && Number.isFinite(P.y) && Number.isFinite(R.x)) {
+        const isDoubling = !Q || (Math.abs(P.x-Q.x)<1e-9 && Math.abs(P.y-Q.y)<1e-9);
+        // The chord/tangent line passes through P and Ri
+        const L1x=P.x, L1y=P.y, L2x=Ri.x, L2y=Ri.y;
+        if (Math.abs(L2x-L1x) > 1e-10) {
+          const slope = (L2y-L1y)/(L2x-L1x);
+          ctx.strokeStyle = darkMode ? "#f59e0b" : "#b45309"; ctx.lineWidth = 1.5; ctx.setLineDash([7,4]);
+          ctx.beginPath();
+          ctx.moveTo(tx(x_min), ty(L1y+slope*(x_min-L1x)));
+          ctx.lineTo(tx(x_max), ty(L1y+slope*(x_max-L1x)));
+          ctx.stroke(); ctx.setLineDash([]);
+        }
+        // Highlight Q when chord (different points)
+        if (!isDoubling && Q && Number.isFinite(Q.x)) {
+          ctx.fillStyle = darkMode ? "#fbbf24" : "#d97706";
+          ctx.beginPath(); ctx.arc(tx(Q.x), ty(Q.y), 7, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = darkMode ? "#161b22" : "#fff"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(tx(Q.x), ty(Q.y), 7, 0, Math.PI*2); ctx.stroke();
+        }
+        // Vertical reflection line Ri → R
+        if (Number.isFinite(Ri.y)) {
+          ctx.strokeStyle = darkMode ? "#a78bfa" : "#7c3aed"; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
+          ctx.beginPath(); ctx.moveTo(tx(Ri.x), ty(Ri.y)); ctx.lineTo(tx(R.x), ty(R.y));
+          ctx.stroke(); ctx.setLineDash([]);
+          // Ri: pre-reflection intersection point (amber)
+          ctx.fillStyle = darkMode ? "#f59e0b" : "#b45309";
+          ctx.beginPath(); ctx.arc(tx(Ri.x), ty(Ri.y), 5, 0, Math.PI*2); ctx.fill();
+          // R = P⊕Q: final result (violet)
+          ctx.fillStyle = darkMode ? "#a78bfa" : "#7c3aed";
+          ctx.beginPath(); ctx.arc(tx(R.x), ty(R.y), 7, 0, Math.PI*2); ctx.fill();
+          ctx.font = "bold 11px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+          ctx.fillStyle = darkMode ? "#a78bfa" : "#7c3aed";
+          ctx.fillText(`P⊕Q=(${fmtNum(R.x)},${fmtNum(R.y)})`, tx(R.x)+9, ty(R.y)-7);
+        }
+      }
+    }
+
     ctx.restore();
 
     ctx.strokeStyle = darkMode ? "#30363d" : "#d1d5db"; ctx.lineWidth = 1;
@@ -1075,7 +1173,7 @@ export default function SolverPage() {
 
   useEffect(() => {
     if (showPlot && plotData && viewport) renderPlot();
-  }, [showPlot, plotData, viewport, showLabels, pointFilter, renderPlot]);
+  }, [showPlot, plotData, viewport, showLabels, pointFilter, showSymmetry, showConstruction, groupLawPoint, renderPlot]);
 
   /* ── Canvas zoom / pan ────────────────────────────────────────────────── */
   useEffect(() => {
@@ -1133,8 +1231,17 @@ export default function SolverPage() {
       });
       const d = await r.json();
       if (d.ok) {
-        if (d.is_infinity) setGroupLawResult("P ⊕ Q = O (point at infinity)");
-        else setGroupLawResult(`P ⊕ Q = (${d.result.x}, ${d.result.y})`);
+        if (d.is_infinity) {
+          setGroupLawResult("P ⊕ Q = O (point at infinity)");
+          setGroupLawPoint(null); groupLawPointRef.current = null;
+        } else {
+          setGroupLawResult(`P ⊕ Q = (${d.result.x}, ${d.result.y})`);
+          const rx = parseFloat(d.result.x), ry = parseFloat(d.result.y);
+          if (Number.isFinite(rx) && Number.isFinite(ry)) {
+            const pt = { x: rx, y: ry };
+            setGroupLawPoint(pt); groupLawPointRef.current = pt;
+          }
+        }
       }
       else setGroupLawResult("Error: " + d.error);
     } catch { setGroupLawResult("Request failed."); }
@@ -1862,9 +1969,23 @@ ${tableRows}
                   const vp={xMin:plotData.x_min,xMax:plotData.x_max,yMin:plotData.y_min,yMax:plotData.y_max};
                   setViewport(vp); viewportRef.current=vp; renderPlot();
                 }}><ResetIcon /> Reset</button>
+                <button className="btn btn-ghost btn-xs" type="button" onClick={() => {
+                  const sols = plotSolsRef.current; if (!sols.length) return;
+                  const xs = sols.map(s => parseFloat(String(s.x))).filter(Number.isFinite);
+                  const ys = sols.map(s => parseFloat(String(s.y))).filter(Number.isFinite);
+                  if (!xs.length || !ys.length) return;
+                  const xMn=Math.min(...xs),xMx=Math.max(...xs),yMn=Math.min(...ys),yMx=Math.max(...ys);
+                  const padX=(xMx-xMn)*0.25||3, padY=(yMx-yMn)*0.25||3;
+                  const nv={xMin:xMn-padX,xMax:xMx+padX,yMin:yMn-padY,yMax:yMx+padY};
+                  setViewport(nv); viewportRef.current=nv; renderPlot();
+                }}>◎ Fit</button>
                 <button className="btn btn-ghost btn-xs" type="button" onClick={() => { setShowLabels(v => !v); showLabelsRef.current = !showLabelsRef.current; renderPlot(); }}>
                   {showLabels ? "Hide labels" : "Show labels"}
                 </button>
+                <button className={"btn btn-ghost btn-xs"+(showSymmetry?" btn-active":"")} type="button" onClick={() => { const v=!showSymmetry; setShowSymmetry(v); showSymmetryRef.current=v; renderPlot(); }}>↕ Symmetry</button>
+                {groupLawPoint && (
+                  <button className={"btn btn-ghost btn-xs"+(showConstruction?" btn-active":"")} type="button" onClick={() => { const v=!showConstruction; setShowConstruction(v); showConstructionRef.current=v; renderPlot(); }}>⌇ Construction</button>
+                )}
                 <div className="pt-filter-group" style={{marginLeft:"auto"}}>
                   {(["all","integer","rational"] as const).map(f => (
                     <button key={f} className={"pt-filter-btn"+(pointFilter===f?" active":"")} type="button" onClick={() => { setPointFilter(f); filterRef.current=f; renderPlot(); }}>
@@ -1877,6 +1998,10 @@ ${tableRows}
                 <canvas ref={canvasRef} id="curve-canvas" />
               </div>
               <p className="plot-caption">{plotCaption} — scroll to zoom, drag to pan</p>
+              <div className="plot-legend">
+                <span className="plot-legend-item"><span className="plot-legend-swatch-sq" />ℤ Integer point</span>
+                <span className="plot-legend-item"><span className="plot-legend-swatch-circ" />ℚ Rational point</span>
+              </div>
 
               {/* Mathematician's Lens */}
               {solutions.length > 0 && solverMode === "ec" && (
