@@ -316,7 +316,7 @@ tbody tr:hover { background: var(--surface); }
 .plot-legend-item { display: flex; align-items: center; gap: 5px; }
 .plot-legend-swatch-sq {
   width: 9px; height: 9px;
-  background: var(--text); border: 1.5px solid #2563eb;
+  background: #ef4444; border: 1.5px solid #fff;
   display: inline-block; flex-shrink: 0;
 }
 .plot-legend-swatch-circ {

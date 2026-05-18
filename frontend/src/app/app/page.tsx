@@ -1092,8 +1092,8 @@ export default function SolverPage() {
       const isIntPt = isInt(x) && isInt(y);
       if (isIntPt) {
         const sz = 8;
-        ctx.fillStyle = darkMode ? "#f0f6fc" : "#111827";
-        ctx.strokeStyle = darkMode ? "#60a5fa" : "#2563eb"; ctx.lineWidth = 1.5;
+        ctx.fillStyle = "#ef4444";
+        ctx.strokeStyle = darkMode ? "#161b22" : "#fff"; ctx.lineWidth = 1.5;
         ctx.fillRect(px-sz/2, py-sz/2, sz, sz); ctx.strokeRect(px-sz/2, py-sz/2, sz, sz);
       } else {
         ctx.strokeStyle = darkMode ? "#60a5fa" : "#2563eb";
