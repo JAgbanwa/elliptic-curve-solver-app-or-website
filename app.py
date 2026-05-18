@@ -2229,7 +2229,572 @@ def api_frobenius():
     }
 
 
-# ── AI Chat endpoint ──────────────────────────────────────────────────────────
+# ── Mathematician's Lens helpers ──────────────────────────────────────────────
+
+def _insight_detect_family(expr, n_sym, x_sym):
+    """Return a known family identifier or 'general'."""
+    try:
+        from sympy import Poly, expand, simplify
+        px = Poly(expand(expr), x_sym)
+        if px.degree() != 3:
+            return "general"
+        coeffs = px.all_coeffs()
+        if len(coeffs) != 4:
+            return "general"
+        a3, a2, a1, a0 = coeffs
+        if a3 != 1 or a2 != 0:
+            return "general"
+        # y² = x³ − n²x  (congruent number family)
+        if a0 == 0 and simplify(a1 + n_sym**2) == 0:
+            return "congruent_number"
+        # y² = x³ − nx
+        if a0 == 0 and simplify(a1 + n_sym) == 0:
+            return "minus_nx"
+        # y² = x³ + n  (Mordell curves)
+        if a1 == 0 and simplify(a0 - n_sym) == 0:
+            return "x_cubed_plus_n"
+        # y² = x³ − n  (Mordell curves, negative)
+        if a1 == 0 and simplify(a0 + n_sym) == 0:
+            return "x_cubed_minus_n"
+        return "short_weierstrass"
+    except Exception:
+        return "general"
+
+
+def _insight_sol_stats(raw_sols):
+    count = len(raw_sols)
+    if count == 0:
+        return {"count": 0, "n_count": 0, "torsion_count": 0, "non_torsion_count": 0}
+    n_set = {}
+    torsion = 0
+    non_torsion = 0
+    for s in raw_sols:
+        try:
+            nv = str(s.get("n", ""))
+            n_set[nv] = n_set.get(nv, 0) + 1
+            y_val = str(s.get("y", "")).strip()
+            if y_val in ("0", "0.0", "-0", "0.00"):
+                torsion += 1
+            else:
+                non_torsion += 1
+        except Exception:
+            pass
+    return {
+        "count": count,
+        "n_count": len(n_set),
+        "torsion_count": torsion,
+        "non_torsion_count": non_torsion,
+    }
+
+
+def _insight_curve_section(deg_x, torsion_roots, disc_str, disc_zeros, family):
+    cards = []
+
+    # ── Genus / curve type ────────────────────────────────────────────────
+    if deg_x == 3:
+        cards.append({
+            "headline": "Elliptic curve — genus 1",
+            "body": (
+                "A cubic f(x) makes y\u00b2 = f(n,x) a curve of genus 1 \u2014 an elliptic curve. "
+                "Unlike conics (genus 0, always rationally parametrisable) and higher-genus curves "
+                "(genus \u2265 2, finitely many rational points by Faltings), elliptic curves sit at "
+                "the critical genus: their rational points form a finitely generated abelian group "
+                "with potentially infinite structure, making them the richest objects in number theory."
+            ),
+            "formula": "E(\u211a) \u2245 \u2124\u02b3 \u2295 E(\u211a)\u209c\u2092\u1d63\u209b",
+            "intuition": (
+                "Genus 1 is the unique 'critical' genus \u2014 just complex enough to have deep structure, "
+                "but still tractable. Genus 0 is trivial (parametrised by \u211a). "
+                "Genus \u2265 2 is too rigid (Faltings: finitely many points). "
+                "Elliptic curves are where the richest arithmetic action lives."
+            ),
+        })
+    elif deg_x == 2:
+        cards.append({
+            "headline": "Conic \u2014 genus 0",
+            "body": (
+                "Degree 2 in x gives y\u00b2 = f(n,x) as a conic. Conics either have no rational "
+                "points at all, or infinitely many \u2014 all parametrised by a single rational parameter. "
+                "The Hasse-Minkowski theorem gives a complete local-global criterion: the conic has "
+                "a rational point if and only if it has a real point and a p-adic point for every prime p."
+            ),
+            "intuition": "Much simpler than elliptic curves. The deep arithmetic of rational points begins at genus 1.",
+        })
+    elif deg_x >= 4:
+        cards.append({
+            "headline": f"High-genus curve (degree {deg_x} \u2192 genus \u2265 2)",
+            "body": (
+                f"Degree {deg_x} in x gives a curve of genus \u2265 2. "
+                "By Faltings' theorem (Mordell conjecture, proved 1983), such a curve over \u211a "
+                "has only FINITELY many rational points \u2014 but the proof is non-constructive: "
+                "it gives no bound on the number of points or an algorithm to find them all."
+            ),
+            "formula": "genus \u2265 2  \u27f9  |E(\u211a)| < \u221e  (Faltings 1983)",
+            "intuition": (
+                "Faltings' theorem was a Fields Medal result. It resolves Fermat's Last Theorem "
+                "for exponent \u2265 5 in a few lines (the Fermat curve has genus (n-1)(n-2)/2 \u2265 2 for n \u2265 4). "
+                "But it gives no effective bound \u2014 finding all rational points on a specific high-genus curve "
+                "remains one of the hardest computational problems."
+            ),
+        })
+
+    # ── Known family ──────────────────────────────────────────────────────
+    if family == "congruent_number":
+        cards.append({
+            "headline": "Congruent number curve y\u00b2 = x\u00b3 \u2212 n\u00b2x",
+            "body": (
+                "This is one of the most studied families in number theory. "
+                "A positive integer n is a congruent number if it equals the area of a right triangle "
+                "with all three side lengths rational. The key connection: "
+                "n is congruent if and only if y\u00b2 = x\u00b3 \u2212 n\u00b2x has a rational point with y \u2260 0."
+            ),
+            "formula": "n congruent  \u27fa  rank(y\u00b2 = x\u00b3 \u2212 n\u00b2x)  \u2265 1",
+            "intuition": (
+                "Known congruent numbers: 5, 6, 7, 13, 14, 15, 20, 21, \u2026 "
+                "Non-congruent: 1, 2, 3, 10, 11, \u2026 (no rational right triangle has these areas). "
+                "First recorded in Arab manuscripts ~900 CE \u2014 one of mathematics' oldest open problems."
+            ),
+        })
+    elif family in ("x_cubed_plus_n", "x_cubed_minus_n"):
+        sign = "+" if family == "x_cubed_plus_n" else "\u2212"
+        cards.append({
+            "headline": f"Mordell curve family y\u00b2 = x\u00b3 {sign} n",
+            "body": (
+                f"The family y\u00b2 = x\u00b3 {sign} n are the Mordell curves, studied since Fermat. "
+                "For most n, these curves have rank 0 (finitely many integer points by Siegel's theorem). "
+                "Fermat proved y\u00b2 = x\u00b3 \u2212 2 has only the integer solutions (x,y) = (3, \u00b15) "
+                "using what is now called infinite descent."
+            ),
+            "intuition": (
+                "The j-invariant of a Mordell curve is 0, meaning it has complex multiplication (CM) "
+                "by \u2124[\u03c9] where \u03c9 = e^(2\u03c0i/3). CM curves have extra symmetry that makes their "
+                "arithmetic more tractable \u2014 and more studied."
+            ),
+        })
+
+    # ── Discriminant ─────────────────────────────────────────────────────
+    if disc_str:
+        sing = (
+            f" It vanishes at n = {', '.join(disc_zeros)}, "
+            "where the curve degenerates (node or cusp \u2014 no longer elliptic)."
+            if disc_zeros else ""
+        )
+        cards.append({
+            "headline": "Discriminant \u0394 \u2014 detecting singularities",
+            "body": (
+                f"\u0394 = {disc_str}. "
+                "A non-zero discriminant confirms the cubic has three distinct roots, "
+                "making the curve non-singular \u2014 a genuine elliptic curve with a well-defined "
+                f"group law.{sing}"
+            ),
+            "formula": "\u0394 \u2260 0  \u27fa  E is smooth  \u27fa  group law is well-defined",
+            "intuition": (
+                "At n-values where \u0394 = 0, the curve degenerates: a cuspidal cubic (cusp \u2014 no group law) "
+                "or nodal cubic (node \u2014 group law degenerates to \u211a\u00d7 or \u211a\u207a). "
+                "These degenerate fibres are the most studied in Kodaira's classification of elliptic surfaces."
+            ),
+        })
+
+    # ── 2-torsion ─────────────────────────────────────────────────────────
+    if torsion_roots:
+        roots_str = ",  ".join(f"x = {r}" for r in torsion_roots[:4])
+        cards.append({
+            "headline": "2-torsion: the 'free' solutions",
+            "body": (
+                f"Setting y = 0 gives f(n,x) = 0, with roots: {roots_str}. "
+                "Each root x\u2080 yields the point (x\u2080, 0) on the curve. "
+                "These have order exactly 2 in the group: the tangent at (x\u2080, 0) is vertical, "
+                "so it meets the curve 'again' at the point at infinity \u1d4aa, giving P + P = \u1d4aa."
+            ),
+            "formula": "(x\u2080, 0) \u2208 E  \u27f9  2\u00b7(x\u2080, 0) = \u1d4aa",
+            "intuition": (
+                "Nagell-Lutz theorem: every integer torsion point (x,y) satisfies y = 0 (2-torsion) "
+                "or y\u00b2 | \u0394. This gives a finite, checkable list of all torsion candidates "
+                "with no search required \u2014 just compute \u0394 and test divisors."
+            ),
+        })
+
+    return {"id": "curve", "title": "Curve Structure", "icon": "\u222e", "cards": cards}
+
+
+def _insight_strategy_section(deg_x, family, n_min, n_max):
+    cards = []
+
+    cards.append({
+        "headline": "1. Classify before you compute",
+        "body": (
+            "The first move is always to identify the problem's structure. "
+            "For y\u00b2 = f(n,x), the degree of f in x immediately determines the genus, "
+            "which determines which theorems apply. "
+            "A cubic \u2192 elliptic curve theory (Mordell-Weil, Mazur, BSD). "
+            "A quartic \u2192 hyperelliptic (model change needed). "
+            "A quadratic \u2192 conic (Hasse-Minkowski, completely elementary)."
+        ),
+        "intuition": (
+            "This is mathematical triage: 10 seconds of classification tells you whether the problem "
+            "has finitely many solutions, infinitely many, or is open. Most calculators skip this step "
+            "and dive into computation. Mathematicians classify first."
+        ),
+    })
+
+    if deg_x == 3:
+        cards.append({
+            "headline": "2. Torsion first \u2014 it costs nothing",
+            "body": (
+                "The torsion subgroup is finite and findable without any search. "
+                "Nagell-Lutz: check y = 0 (roots of f) and y\u00b2 | \u0394. "
+                "Mazur's theorem (1977) limits torsion over \u211a to exactly 15 possible groups. "
+                "This produces the 'free' solutions before numerical search begins."
+            ),
+            "formula": "T(E/\u211a)  \u2208  {\u2124/n\u2124 : n \u2264 10 or n = 12}  \u222a  {\u2124/2 \u00d7 \u2124/2n : n \u2264 4}",
+            "intuition": (
+                "Mazur's theorem is remarkable: among infinitely many possible finite abelian groups, "
+                "only 15 can appear as torsion of an elliptic curve over \u211a. "
+                "Proving this required the full machinery of modular curves (Eichler-Shimura theory) "
+                "and is considered one of the great theorems of 20th-century arithmetic."
+            ),
+        })
+        cards.append({
+            "headline": "3. Non-torsion points certify rank \u2265 1",
+            "body": (
+                "A point (x,y) with y \u2260 0 that is not in the torsion group is a generator of a \u2124-summand. "
+                "From one generator P, the chord-tangent law produces P, 2P, 3P, 4P, \u2026 \u2014 "
+                "infinitely many distinct rational points with growing height. "
+                "Each such point for a given n certifies rank(E_n) \u2265 1."
+            ),
+            "intuition": (
+                "Height grows roughly as H(2P) \u2248 H(P)\u2074. "
+                "So a generator of height 1000 doubles to height ~10\u00b9\u00b2 \u2014 essentially invisible to integer search. "
+                "Finding small generators is genuinely informative; their absence suggests rank 0."
+            ),
+        })
+
+    n_note = ""
+    if n_min and n_max:
+        try:
+            span = abs(int(n_max) - int(n_min)) + 1
+            n_note = f" Your search covers {span} curve{'s' if span != 1 else ''} in this parametric family."
+        except Exception:
+            pass
+
+    cards.append({
+        "headline": "4. Integer search is provably complete",
+        "body": (
+            "Siegel's theorem (1929): every elliptic curve over \u211a has only finitely many integer points. "
+            "So for a fixed n, all integer solutions lie in a computable box. "
+            f"A search over bounded (n, x) is a complete enumeration of integer points in that region.{n_note}"
+        ),
+        "formula": "|E(\u2124)| < \u221e  (Siegel 1929)",
+        "intuition": (
+            "Siegel's theorem is non-effective \u2014 it doesn't give the size of the box. "
+            "Baker's theorem (1966) later made it effective via linear forms in logarithms: "
+            "we can compute an explicit upper bound on |x| and |y| for integer solutions. "
+            "This makes the search provably complete, not just heuristically so."
+        ),
+    })
+
+    if family == "congruent_number":
+        cards.append({
+            "headline": "Strategy shortcut: Tunnell's criterion (1983)",
+            "body": (
+                "For y\u00b2 = x\u00b3 \u2212 n\u00b2x, Tunnell found a modular forms criterion: define "
+                "A(n) = #{(x,y,z) \u2208 \u2124\u00b3 : 2x\u00b2+y\u00b2+8z\u00b2 = n} and B(n) = #{2x\u00b2+y\u00b2+32z\u00b2 = n}. "
+                "If BSD holds: n (odd, squarefree) is congruent \u27fa A(n) = 2\u00b7B(n). "
+                "This is computable in polynomial time \u2014 vs exponential brute-force search."
+            ),
+            "intuition": (
+                "The unconditional direction is proved (congruent \u27f9 Tunnell's condition holds). "
+                "The converse requires BSD. If BSD is false, Tunnell's criterion could produce "
+                "false positives. The $1M prize for BSD would make this computable unconditionally."
+            ),
+        })
+
+    return {"id": "strategy", "title": "Mathematical Strategy", "icon": "\u22a2", "cards": cards}
+
+
+def _insight_solutions_section(sol_stats, deg_x):
+    cards = []
+    count     = sol_stats["count"]
+    n_count   = sol_stats["n_count"]
+    torsion   = sol_stats["torsion_count"]
+    non_tors  = sol_stats["non_torsion_count"]
+
+    if count == 0:
+        cards.append({
+            "headline": "No integer solutions in the searched range",
+            "body": (
+                "Absence of solutions is mathematically meaningful, not a failure. "
+                "For a rank-0 curve with trivial torsion, there are provably zero integer points. "
+                "For rank \u2265 1, the generator might lie outside your search box (large height). "
+                "For a genus \u2265 2 curve, the finitely many rational points might all be outside the range."
+            ),
+            "intuition": (
+                "A complete search over a bounded x-range that finds nothing "
+                "is strong (but not conclusive) evidence for rank 0. "
+                "To confirm rank 0, one performs a full 2-descent computation \u2014 "
+                "an algebraic procedure that doesn't require searching."
+            ),
+        })
+        return {"id": "solutions", "title": "Reading the Solutions", "icon": "\u2208", "cards": cards}
+
+    torsion_note = (
+        f" {torsion} point{'s' if torsion != 1 else ''} with y = 0 are 2-torsion candidates."
+        if torsion else ""
+    )
+    gen_note = (
+        f" {non_tors} point{'s' if non_tors != 1 else ''} with y \u2260 0 are potential rank generators."
+        if non_tors else ""
+    )
+    cards.append({
+        "headline": (
+            f"{count} integer point{'s' if count != 1 else ''} "
+            f"across {n_count} curve{'s' if n_count != 1 else ''}"
+        ),
+        "body": f"Total: {count} solution{'s' if count != 1 else ''}.{torsion_note}{gen_note}",
+        "intuition": "Each value of n defines a distinct elliptic curve. Rank and torsion can vary dramatically across the family.",
+    })
+
+    if torsion > 0:
+        cards.append({
+            "headline": "y = 0 points: the 2-torsion subgroup",
+            "body": (
+                "Points of the form (x\u2080, 0) are exactly the 2-torsion: P + P = \u1d4aa. "
+                "The tangent to the curve at (x\u2080, 0) is vertical, so it meets the curve "
+                "at the point at infinity \u1d4aa \u2014 this is the group law giving 2P = \u1d4aa. "
+                "These are always 'free': present whenever f(n, x\u2080) = 0 has an integer root."
+            ),
+            "formula": "(x\u2080, 0) \u2208 E(\u211a)  \u27fa  f(n, x\u2080) = 0",
+            "intuition": (
+                "If f(n,x) has 3 rational roots, the 2-torsion subgroup is \u2124/2 \u00d7 \u2124/2 (Klein 4-group). "
+                "If only 1 rational root: \u2124/2. "
+                "These 2-torsion points live entirely in the torsion part T \u2014 "
+                "they never contribute to the rank (the infinite part)."
+            ),
+        })
+
+    if non_tors > 0:
+        cards.append({
+            "headline": "y \u2260 0 points: rank generators",
+            "body": (
+                "A point (x, y) with y \u2260 0 is almost certainly non-torsion. "
+                "To confirm: check y\u00b2 does not divide \u0394 (Nagell-Lutz). "
+                "Each such point for a given n certifies rank(E_n) \u2265 1 \u2014 "
+                "meaning E_n(\u211a) is infinite, with P, 2P, 3P, \u2026 all rational but with "
+                "rapidly growing coordinates."
+            ),
+            "formula": "rank \u2265 1  \u27f9  |E(\u211a)| = \u221e",
+            "intuition": (
+                "The chord-tangent law: to compute 2P, draw the tangent at P \u2014 "
+                "it meets the curve at a third point, then reflect over the x-axis. "
+                "Height doubles roughly as H(2P) \u2248 H(P)\u2074, so generators with height > ~1000 "
+                "are essentially invisible to integer search, yet still generate infinitely many points."
+            ),
+        })
+
+    if non_tors > 0 and n_count > 4:
+        density = non_tors / max(n_count, 1)
+        level = "high" if density > 0.6 else "moderate" if density > 0.3 else "low"
+        cards.append({
+            "headline": f"Solution density is {level} ({non_tors}/{n_count} n-values have generators)",
+            "body": (
+                f"{'Most' if density > 0.6 else 'Some'} searched n-values yield non-torsion points. "
+                "This is consistent with the average analytic rank of this curve family, "
+                "which BSD predicts via the order of vanishing of L(E_n, s) at s = 1."
+            ),
+            "intuition": (
+                "Random matrix theory predicts ~50% of elliptic curves have rank 0 and ~50% rank 1, "
+                "with negligibly many having rank \u2265 2. Specific parametric families can deviate: "
+                "the congruent number family has a positive proportion with rank \u2265 1."
+            ),
+        })
+
+    return {"id": "solutions", "title": "Reading the Solutions", "icon": "\u2208", "cards": cards}
+
+
+def _insight_deeper_section(deg_x, family):
+    cards = []
+
+    if deg_x == 3:
+        cards.append({
+            "headline": "Birch\u2013Swinnerton-Dyer conjecture (\u00a31M open problem)",
+            "body": (
+                "BSD predicts: rank(E(\u211a)) = ord_{s=1} L(E, s). "
+                "The L-function L(E, s) encodes the number of points on E mod p for every prime p. "
+                "BSD connects the arithmetic of the curve (rational points you can compute) "
+                "to its analytic behaviour (complex analysis). "
+                "It is one of the seven Millennium Prize Problems."
+            ),
+            "formula": "rank(E(\u211a))  =  ord_{s=1} L(E, s)  (BSD conjecture)",
+            "intuition": (
+                "Every non-torsion rational point you find is direct arithmetic evidence consistent with BSD: "
+                "it implies L(E,1) = 0 (BSD says so). "
+                "The conjecture has been verified computationally for millions of curves, "
+                "and is proved for rank 0 and rank 1 curves (Kolyvagin, 1988) \u2014 but not in general."
+            ),
+        })
+        cards.append({
+            "headline": "Mordell-Weil theorem: the group structure",
+            "body": (
+                "Mordell (1922) proved E(\u211a) is finitely generated; Weil generalised to number fields (1929). "
+                "The rank r \u2208 {0, 1, 2, \u2026} measures the 'size' of the infinite part. "
+                "No unconditional upper bound on r is known. "
+                "The current record is rank \u2265 29 (Elkies, 2006). "
+                "Average rank is conjectured to be 1/2."
+            ),
+            "formula": "E(\u211a) \u2245 \u2124\u02b3 \u2295 T,   r \u2265 0,   T finite",
+            "intuition": (
+                "The torsion T is completely classified (Mazur's theorem: exactly 15 possible groups). "
+                "The rank r is the deep mystery \u2014 computing it is essentially equivalent to BSD. "
+                "The fastest known algorithm (2-descent) is exponential in the worst case."
+            ),
+        })
+        cards.append({
+            "headline": "Elliptic curve cryptography",
+            "body": (
+                "The same chord-tangent group law used here underlies modern cryptography. "
+                "ECDSA (Bitcoin, TLS) and ECDH (TLS key exchange) rely on the elliptic curve "
+                "discrete logarithm: given P and Q = nP, finding n is computationally infeasible "
+                "for large prime-order curves. A 256-bit EC key gives security equivalent to "
+                "a 3072-bit RSA key."
+            ),
+            "intuition": (
+                "Your parametric family is not cryptographically suitable \u2014 it has special structure "
+                "(parametric, potentially low order). Cryptographic curves (P-256, Curve25519, secp256k1) "
+                "are chosen for maximal group order, no CM, no small subgroups, and resistance to "
+                "MOV, ECDLP, and isogeny attacks."
+            ),
+        })
+
+    if family == "congruent_number":
+        cards.append({
+            "headline": "The congruent number problem (antiquity \u2192 today)",
+            "body": (
+                "First recorded in Arab manuscripts around 900 CE: which integers are areas of "
+                "rational right triangles? The link to elliptic curves was found in the 1970s\u201380s. "
+                "Tunnell (1983) gave a near-complete modular forms criterion. "
+                "In 2019, Smith proved BSD holds for a positive proportion of congruent number curves, "
+                "making the problem conditionally solved for 100% of squarefree n via Tunnell."
+            ),
+            "intuition": (
+                "The 3-4-5 right triangle has area 6, so 6 is congruent. "
+                "Is 1 congruent? It would need a rational right triangle of area 1. "
+                "Fermat proved no such triangle exists \u2014 but his proof required what is now "
+                "the Nagell-Lutz theorem applied to y\u00b2 = x\u00b3 \u2212 x."
+            ),
+        })
+
+    cards.append({
+        "headline": "LMFDB \u2014 the global database",
+        "body": (
+            "Every elliptic curve over \u211a in short Weierstrass form y\u00b2 = x\u00b3 + ax + b "
+            "is catalogued in the LMFDB (lmfdb.org): rank, generators, torsion, conductor, "
+            "BSD invariants, modular form, and L-function data. "
+            "Convert any specific curve to short Weierstrass form and search by (a, b) coefficients "
+            "to find its complete arithmetic profile instantly."
+        ),
+        "intuition": (
+            "The LMFDB contains over 3 million curves, built by a global collaboration. "
+            "Every elliptic curve over \u211a is modular (Wiles\u2013Taylor, 1995 \u2014 Fermat's Last Theorem) "
+            "so each curve corresponds to a modular form. "
+            "The LMFDB is the meeting point between these two worlds."
+        ),
+    })
+
+    return {"id": "deeper", "title": "Deeper Theory", "icon": "\u221e", "cards": cards}
+
+
+# ── Mathematician's Lens endpoint ─────────────────────────────────────────────
+
+@app.route("/api/insight", methods=["POST"])
+def api_insight():
+    """
+    Return structured mathematical insight about the parametric elliptic curve family.
+
+    Request body (JSON):
+        {
+          "expr":      "x**3 - n**2*x",
+          "solutions": [{n, x, y}, ...],   # optional, capped at 300
+          "n_min":     "-10",
+          "n_max":     "10"
+        }
+    """
+    data     = request.get_json(silent=True) or {}
+    expr_str = data.get("expr", "").strip()
+    raw_sols = data.get("solutions", [])[:300]
+    n_min    = str(data.get("n_min", ""))
+    n_max    = str(data.get("n_max", ""))
+
+    if not expr_str:
+        return jsonify({"ok": False, "error": "No expression provided."}), 400
+
+    try:
+        from sympy import symbols, sympify, Poly, expand, solve, factor, simplify
+
+        n_sym, x_sym = symbols("n x", real=True)
+        try:
+            expr = sympify(expr_str, locals={"n": n_sym, "x": x_sym})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"Could not parse expression: {exc}"}), 400
+
+        # ── Degree / polynomial structure ──────────────────────────────────
+        deg_x    = -1
+        coeffs_x = []
+        try:
+            px       = Poly(expand(expr), x_sym)
+            deg_x    = px.degree()
+            coeffs_x = px.all_coeffs()
+        except Exception:
+            pass
+
+        # ── 2-torsion roots: solve f(n,x) = 0 treating n as symbol ────────
+        torsion_roots = []
+        try:
+            roots_sym = solve(expr, x_sym)
+            for r in roots_sym[:5]:
+                torsion_roots.append(str(r))
+        except Exception:
+            pass
+
+        # ── Discriminant (cubic only) ──────────────────────────────────────
+        disc_str  = None
+        disc_zeros = []
+        if deg_x == 3 and len(coeffs_x) == 4:
+            try:
+                a3, a2, a1, a0 = coeffs_x
+                disc = (
+                    18*a3*a2*a1*a0
+                    - 4*a2**3*a0
+                    + a2**2*a1**2
+                    - 4*a3*a1**3
+                    - 27*a3**2*a0**2
+                )
+                disc_f    = factor(disc)
+                disc_str  = str(disc_f)
+                try:
+                    zeros = solve(disc_f, n_sym)
+                    disc_zeros = [str(z) for z in zeros[:4]]
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # ── Family detection & solution stats ──────────────────────────────
+        family    = _insight_detect_family(expr, n_sym, x_sym)
+        sol_stats = _insight_sol_stats(raw_sols)
+
+        sections = [
+            _insight_curve_section(deg_x, torsion_roots, disc_str, disc_zeros, family),
+            _insight_strategy_section(deg_x, family, n_min, n_max),
+            _insight_solutions_section(sol_stats, deg_x),
+            _insight_deeper_section(deg_x, family),
+        ]
+        return jsonify({"ok": True, "sections": sections})
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():

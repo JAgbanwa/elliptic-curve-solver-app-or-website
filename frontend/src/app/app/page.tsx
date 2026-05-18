@@ -3,6 +3,7 @@ import "./solver.css";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import Link from "next/link";
+import InsightPanel from "@/components/InsightPanel";
 
 /* ── SVG icon components ─────────────────────────────────────────────────── */
 const SunIcon = () => (
@@ -1689,6 +1690,11 @@ ${tableRows}
                 <canvas ref={canvasRef} id="curve-canvas" />
               </div>
               <p className="plot-caption">{plotCaption} — scroll to zoom, drag to pan</p>
+
+              {/* Mathematician's Lens */}
+              {solutions.length > 0 && solverMode === "ec" && (
+                <InsightPanel expr={expr} solutions={solutions} nMin={nMin} nMax={nMax} />
+              )}
 
               {/* Group law calculator */}
               {solutions.length > 0 && solverMode === "ec" && (

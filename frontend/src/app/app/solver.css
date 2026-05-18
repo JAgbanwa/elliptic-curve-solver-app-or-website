@@ -538,3 +538,94 @@ details[open] .ci-summary::before { content: "▾"; }
 .example-card-expr { font-family: var(--font-mono); font-size: .74rem; color: var(--text-dim); margin-bottom: 5px; }
 .example-card-desc { font-size: .72rem; color: var(--text-dim); line-height: 1.5; }
 
+/* ── Mathematician's Lens (Insight Panel) ──────────────────────────────────── */
+
+.insight-root { margin-top: 24px; border: 1.5px solid var(--border); }
+
+.insight-trigger {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; background: var(--surface, #fafafa); border: none; cursor: pointer;
+  font-size: .82rem; font-weight: 600; letter-spacing: .03em;
+  border-bottom: 1px solid transparent; transition: background .1s;
+}
+.insight-trigger:hover { background: var(--surface2, #f0f0f0); }
+.insight-trigger--open { border-bottom: 1px solid var(--border); }
+
+.insight-trigger-left { display: flex; align-items: center; gap: 8px; }
+.insight-trigger-icon { font-size: 1rem; }
+.insight-trigger-label { font-size: .82rem; font-weight: 600; }
+.insight-stale-badge {
+  font-size: .64rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--text); color: var(--bg); padding: 1px 5px;
+}
+.insight-trigger-right { font-size: .74rem; color: var(--text-dim); }
+
+.insight-body { background: var(--bg); }
+
+.insight-loading {
+  display: flex; align-items: center; gap: 8px; padding: 16px;
+  font-size: .78rem; color: var(--text-dim);
+}
+@keyframes insight-spin { to { transform: rotate(360deg); } }
+.insight-spinner { display: inline-block; animation: insight-spin 1s linear infinite; }
+
+.insight-error {
+  padding: 12px 16px; font-size: .78rem; color: #c00;
+  border-bottom: 1px solid var(--border);
+}
+
+.insight-section { border-bottom: 1px solid var(--border); }
+.insight-section:last-of-type { border-bottom: none; }
+
+.insight-section-btn {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 16px;
+  background: var(--surface, #fafafa); border: none; cursor: pointer; text-align: left;
+  transition: background .1s;
+}
+.insight-section-btn:hover,
+.insight-section-btn--open { background: var(--surface2, #f0f0f0); }
+
+.insight-section-icon { font-size: .9rem; flex-shrink: 0; }
+.insight-section-title { font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; flex: 1; }
+.insight-section-count { font-size: .68rem; color: var(--text-dim); }
+.insight-section-arrow { font-size: .9rem; font-weight: 700; color: var(--text-dim); flex-shrink: 0; }
+
+.insight-cards { padding: 0 0 8px 0; background: var(--bg); }
+
+.insight-card { border-bottom: 1px solid var(--border); background: var(--bg); }
+.insight-card:last-child { border-bottom: none; }
+
+.insight-card-btn {
+  width: 100%; display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; padding: 10px 18px 10px 24px; background: transparent; border: none;
+  cursor: pointer; text-align: left; transition: background .1s;
+}
+.insight-card-btn:hover,
+.insight-card--open .insight-card-btn { background: var(--surface, #fafafa); }
+.insight-card-headline { font-size: .78rem; font-weight: 600; flex: 1; line-height: 1.4; }
+.insight-card-arrow { font-size: .88rem; font-weight: 700; color: var(--text-dim); flex-shrink: 0; padding-top: 1px; }
+
+.insight-card-body { padding: 4px 18px 14px 24px; display: flex; flex-direction: column; gap: 10px; }
+.insight-card-text { font-size: .78rem; line-height: 1.7; color: var(--text); margin: 0; }
+
+.insight-formula {
+  font-family: var(--font-mono, "Courier New", monospace); font-size: .76rem;
+  padding: 8px 12px; background: var(--surface, #f8f8f8); border-left: 2px solid var(--text);
+  color: var(--text); white-space: pre-wrap;
+}
+html[data-theme="dark"] .insight-formula { background: var(--surface, #111); }
+
+.insight-intuition {
+  font-size: .73rem; line-height: 1.6; color: var(--text-dim);
+  padding: 8px 12px; border-left: 2px solid var(--border); background: var(--surface, #fafafa);
+}
+html[data-theme="dark"] .insight-intuition { background: var(--surface, #111); }
+.insight-intuition-label { font-weight: 700; font-style: italic; color: var(--text); }
+
+.insight-refresh-btn {
+  width: 100%; padding: 8px 16px; background: transparent; border: none;
+  border-top: 1px solid var(--border); cursor: pointer; font-size: .72rem;
+  color: var(--text-dim); text-align: center; transition: color .1s, background .1s;
+}
+.insight-refresh-btn:hover { color: var(--text); background: var(--surface, #fafafa); }
+
