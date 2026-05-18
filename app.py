@@ -3110,7 +3110,7 @@ def _explore_search_section(expr, var_syms, param_name, bound):
     n = len(vars_list)
 
     # Scale bound to keep iterations manageable
-    MAX_ITERS = 400_000
+    MAX_ITERS = 2_000_000
     eff = min(bound, max(3, int(MAX_ITERS ** (1.0 / n)) // 2))
     total = (2 * eff + 1) ** n
 
@@ -3611,7 +3611,7 @@ def api_explore():
     data = request.get_json(silent=True) or {}
     eq_str = data.get("equation", "").strip()
     param_name = data.get("param", "").strip()
-    bound = max(3, min(int(data.get("bound", 12)), 20))
+    bound = max(3, min(int(data.get("bound", 12)), 500))
 
     if not eq_str:
         return jsonify({"ok": False, "error": "No equation provided."}), 400

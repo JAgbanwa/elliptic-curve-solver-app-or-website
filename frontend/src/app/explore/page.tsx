@@ -186,9 +186,9 @@ export default function ExplorePage() {
                 className="explore-small-input"
                 value={bound}
                 min={3}
-                max={20}
+                max={500}
                 onChange={e =>
-                  setBound(Math.max(3, Math.min(20, parseInt(e.target.value) || 12)))
+                  setBound(Math.max(3, Math.min(500, parseInt(e.target.value) || 12)))
                 }
               />
             </div>
