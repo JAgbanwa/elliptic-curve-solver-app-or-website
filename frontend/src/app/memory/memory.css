@@ -1,0 +1,344 @@
+/* ── Mathematical Memory page (mem-* namespace) ──────────────────────────────*/
+
+.mem-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+.mem-header {
+  border-bottom: 1.5px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.mem-header-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mem-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+}
+.mem-logo-icon  { font-size: 1.1rem; }
+.mem-logo-title { font-size: .86rem; font-weight: 700; display: block; line-height: 1.2; }
+.mem-logo-sub   { font-size: .66rem; color: var(--text-dim); display: block; }
+.mem-nav { display: flex; align-items: center; gap: 14px; }
+.mem-nav-link { font-size: .76rem; color: var(--text-dim); text-decoration: none; transition: color .1s; }
+.mem-nav-link:hover { color: var(--text); }
+.mem-theme-btn {
+  font-size: .72rem; background: none; border: 1px solid var(--border);
+  color: var(--text-dim); padding: 3px 9px; cursor: pointer;
+  transition: color .1s, border-color .1s;
+}
+.mem-theme-btn:hover { color: var(--text); border-color: var(--text); }
+
+/* ── Main ── */
+.mem-main {
+  flex: 1;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 40px 24px 64px;
+}
+
+/* ── Hero ── */
+.mem-hero { margin-bottom: 32px; }
+.mem-title { font-size: 1.45rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 6px; }
+.mem-subtitle { font-size: .82rem; color: var(--text-dim); line-height: 1.65; max-width: 560px; margin: 0 0 10px; }
+.mem-stats { display: flex; gap: 16px; }
+.mem-stat { font-size: .70rem; color: var(--text-dim); }
+.mem-stat strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* ── Add form toggle ── */
+.mem-add-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.mem-add-btn {
+  padding: 9px 18px;
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  cursor: pointer;
+  font-size: .80rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  transition: opacity .1s;
+}
+.mem-add-btn:hover { opacity: .82; }
+.mem-add-btn--secondary {
+  background: none;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  font-weight: 400;
+}
+.mem-add-btn--secondary:hover { color: var(--text); border-color: var(--text); opacity: 1; }
+
+/* ── Add/Edit form ── */
+.mem-form {
+  border: 1.5px solid var(--border);
+  padding: 20px;
+  margin-bottom: 24px;
+  background: var(--surface);
+}
+.mem-form-title {
+  font-size: .70rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 14px;
+}
+.mem-type-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.mem-type-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: .72rem;
+  cursor: pointer;
+  transition: all .1s;
+  white-space: nowrap;
+}
+.mem-type-btn:hover { border-color: var(--text); color: var(--text); }
+.mem-type-btn--active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+.mem-form-label {
+  display: block;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.mem-form-input,
+.mem-form-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: .84rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color .15s;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+}
+.mem-form-input:focus,
+.mem-form-textarea:focus { border-color: var(--text); }
+.mem-form-textarea { resize: vertical; line-height: 1.6; min-height: 80px; }
+.mem-form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; }
+.mem-form-field { display: flex; flex-direction: column; gap: 4px; }
+.mem-form-field--grow { flex: 1; min-width: 160px; }
+.mem-pin-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .75rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding-bottom: 8px;
+  white-space: nowrap;
+}
+.mem-pin-label input { margin: 0; cursor: pointer; }
+.mem-form-actions { display: flex; gap: 8px; }
+.mem-form-save {
+  padding: 8px 18px;
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: 700;
+  transition: opacity .1s;
+}
+.mem-form-save:hover:not(:disabled) { opacity: .82; }
+.mem-form-save:disabled { opacity: .35; cursor: not-allowed; }
+.mem-form-cancel {
+  padding: 8px 14px;
+  background: none;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: .78rem;
+  transition: all .1s;
+}
+.mem-form-cancel:hover { color: var(--text); border-color: var(--text); }
+.mem-form-hint { font-size: .68rem; color: var(--text-dim); margin-top: 2px; }
+
+/* ── Controls bar ── */
+.mem-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.mem-search {
+  flex: 1;
+  min-width: 160px;
+  padding: 7px 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: .80rem;
+  outline: none;
+  transition: border-color .15s;
+}
+.mem-search:focus { border-color: var(--text); }
+.mem-filter-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.mem-filter-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: .70rem;
+  cursor: pointer;
+  transition: all .1s;
+  white-space: nowrap;
+}
+.mem-filter-btn:hover { border-color: var(--text); color: var(--text); }
+.mem-filter-btn--active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+/* ── Memory list ── */
+.mem-empty {
+  padding: 40px 0;
+  text-align: center;
+  font-size: .80rem;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.mem-list { display: flex; flex-direction: column; gap: 0; border: 1.5px solid var(--border); }
+.mem-card { border-bottom: 1px solid var(--border); background: var(--bg); }
+.mem-card:last-child { border-bottom: none; }
+.mem-card--pinned { background: var(--surface); }
+.mem-card--editing { background: var(--surface2); }
+
+.mem-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px 8px;
+}
+.mem-type-badge {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 2px;
+  font-family: var(--font-mono, "Courier New", monospace);
+}
+.mem-card-title { font-size: .82rem; font-weight: 600; flex: 1; line-height: 1.4; }
+.mem-pin-star { font-size: .78rem; color: var(--text-dim); flex-shrink: 0; margin-top: 2px; }
+.mem-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.mem-card:hover .mem-card-actions { opacity: 1; }
+.mem-card-action {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: .68rem;
+  cursor: pointer;
+  transition: all .1s;
+}
+.mem-card-action:hover { color: var(--text); border-color: var(--text); }
+.mem-card-action--del:hover { color: #c00; border-color: #c00; }
+.mem-card-action--pin.active { color: var(--text); }
+
+.mem-card-content {
+  padding: 0 16px 8px 16px;
+  font-size: .78rem;
+  line-height: 1.7;
+  color: var(--text);
+  margin: 0;
+  font-family: var(--font-mono, "Courier New", monospace);
+}
+.mem-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 10px;
+  flex-wrap: wrap;
+}
+.mem-var-chip {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  font-size: .65rem;
+  font-family: var(--font-mono, "Courier New", monospace);
+  color: var(--text-dim);
+  background: var(--surface);
+}
+.mem-date { font-size: .64rem; color: var(--text-dim); margin-left: auto; }
+
+/* ── Danger zone ── */
+.mem-danger {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.mem-danger-label { font-size: .70rem; color: var(--text-dim); flex: 1; }
+.mem-danger-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  font-size: .72rem;
+  cursor: pointer;
+  transition: all .1s;
+}
+.mem-danger-btn:hover { color: #c00; border-color: #c00; }
+
+/* ── Footer ── */
+.mem-footer {
+  border-top: 1px solid var(--border);
+  padding: 14px 24px;
+  text-align: center;
+  font-size: .70rem;
+  color: var(--text-dim);
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .mem-main { padding: 24px 16px 48px; }
+  .mem-header-inner { padding: 0 16px; }
+}

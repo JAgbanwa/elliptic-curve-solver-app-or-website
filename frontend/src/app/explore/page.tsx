@@ -1,8 +1,9 @@
 "use client";
 import "./explore.css";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useTheme } from "@/components/ThemeProvider";
+import { MemoryWidget } from "@/components/MemoryWidget";
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 interface ExploreCard {
@@ -60,6 +61,14 @@ export default function ExplorePage() {
     new Set(["profile", "obstruction"])
   );
   const [openCards, setOpenCards] = useState<Set<string>>(new Set());
+
+  // Extract single-letter variable names from the equation for MemoryWidget
+  const detectedVars = useMemo(() => {
+    const names = [...new Set((equation.match(/\b[a-zA-Z]\b/g) ?? []))].filter(
+      (n) => !["e", "E"].includes(n)
+    );
+    return names.sort();
+  }, [equation]);
 
   const handleExplore = useCallback(async () => {
     if (!equation.trim() || loading) return;
@@ -121,6 +130,7 @@ export default function ExplorePage() {
           </Link>
           <nav className="explore-nav">
             <Link href="/app" className="explore-nav-link">← Solver</Link>
+            <Link href="/memory" className="explore-nav-link">Memory</Link>
             <a
               href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website"
               className="explore-nav-link"
@@ -217,6 +227,9 @@ export default function ExplorePage() {
             </div>
           </div>
         </div>
+
+        {/* Memory widget */}
+        <MemoryWidget vars={detectedVars} equation={equation} />
 
         {/* Results */}
         {(loading || result) && (
