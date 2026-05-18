@@ -629,3 +629,43 @@ html[data-theme="dark"] .insight-intuition { background: var(--surface, #111); }
 }
 .insight-refresh-btn:hover { color: var(--text); background: var(--surface, #fafafa); }
 
+/* ── Arithmetic Observations panel ──────────────────────────────────────── */
+.arith-obs-panel {
+  border: 1.5px solid var(--border);
+  margin-bottom: 18px;
+}
+.arith-obs-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font-size: .68rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface, #f9f9f9);
+}
+.arith-obs-list { list-style: none; margin: 0; padding: 0; }
+.arith-obs-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 7px 14px;
+  font-size: .8rem;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--border);
+}
+.arith-obs-item:last-child { border-bottom: none; }
+.arith-obs-icon {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  flex-shrink: 0;
+  min-width: 1.4em;
+  text-align: center;
+  padding-top: 1px;
+}
+.arith-obs-text { color: var(--text); }
+
+

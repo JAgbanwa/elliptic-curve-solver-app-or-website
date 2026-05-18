@@ -1,6 +1,6 @@
 "use client";
 import "./solver.css";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import Link from "next/link";
 import InsightPanel from "@/components/InsightPanel";
@@ -118,6 +118,121 @@ const CoffeeIcon = () => (
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 interface Solution { n: string | number; x: string | number; y: string | number; }
+interface ArithObs  { icon: string; text: string; }
+
+/* ── Arithmetic observation engine (client-side, no backend call) ──────── */
+function computeArithObs(solutions: Solution[], expr: string): ArithObs[] {
+  if (!solutions.length) return [];
+
+  /* local fraction helpers */
+  function parseFrac(v: string | number): { num: number; den: number } | null {
+    if (typeof v === "number") return { num: v, den: 1 };
+    const s = String(v).trim();
+    if (/^-?\d+$/.test(s)) return { num: parseInt(s, 10), den: 1 };
+    const m = s.match(/^(-?\d+)\/(\d+)$/);
+    if (m) return { num: parseInt(m[1], 10), den: parseInt(m[2], 10) };
+    return null;
+  }
+  const isInt = (v: string | number) => { const f = parseFrac(v); return f !== null && f.den === 1; };
+  const toFlt = (v: string | number): number | null => { const f = parseFrac(v); return f ? f.num / f.den : null; };
+
+  const obs: ArithObs[] = [];
+  const intSols = solutions.filter(s => isInt(s.x) && isInt(s.y));
+  const ratSols = solutions.filter(s => !isInt(s.x) || !isInt(s.y));
+
+  /* 1 ── count summary (only when both types exist) */
+  if (intSols.length > 0 && ratSols.length > 0) {
+    obs.push({
+      icon: "∑",
+      text: `${intSols.length} integer point${intSols.length !== 1 ? "s" : ""} and ${ratSols.length} rational point${ratSols.length !== 1 ? "s" : ""} found in search range.`,
+    });
+  }
+
+  /* 2 ── symmetric ±y pairs */
+  const posY = intSols.filter(s => (toFlt(s.y) ?? 0) > 0);
+  if (posY.length > 0) {
+    const allPaired = posY.every(s => {
+      const y = toFlt(s.y)!;
+      return intSols.some(
+        t => String(t.n) === String(s.n)
+          && toFlt(t.x) === toFlt(s.x)
+          && toFlt(t.y) === -y,
+      );
+    });
+    if (allPaired) {
+      obs.push({ icon: "↕", text: "Solutions appear in symmetric ±y pairs — consistent with the y² symmetry of the curve." });
+    }
+  }
+
+  /* 3 ── rational points with small denominators */
+  if (ratSols.length > 0) {
+    const denoms: number[] = [];
+    for (const s of ratSols) {
+      const fx = parseFrac(s.x), fy = parseFrac(s.y);
+      if (fx && fx.den > 1) denoms.push(fx.den);
+      if (fy && fy.den > 1) denoms.push(fy.den);
+    }
+    if (denoms.length > 0) {
+      const minD = Math.min(...denoms);
+      obs.push({
+        icon: "ℚ",
+        text: `${ratSols.length} rational point${ratSols.length !== 1 ? "s" : ""} discovered with denominators as small as ${minD} — non-trivial Mordell-Weil generators.`,
+      });
+    }
+  }
+
+  /* 4 ── unusually large integer point */
+  if (intSols.length > 0) {
+    let maxAbsX = 0;
+    let bestSol: Solution | null = null;
+    for (const s of intSols) {
+      const ax = Math.abs(toFlt(s.x) ?? 0);
+      if (ax > maxAbsX) { maxAbsX = ax; bestSol = s; }
+    }
+    if (maxAbsX > 1000 && bestSol) {
+      const xFmt = Number(bestSol.x).toLocaleString();
+      const yFmt = Math.abs(Number(bestSol.y)).toLocaleString();
+      obs.push({
+        icon: "⬆",
+        text: `Curve admits an unusually large integer point — (${xFmt}, ${yFmt}). Large height suggests the Mordell-Weil group has rank ≥ 1.`,
+      });
+    }
+  }
+
+  /* 5 ── singularity check for short Weierstrass y² = x³ + ax + b */
+  try {
+    const t = expr.trim().replace(/\s+/g, "");
+    const prefix = t.startsWith("x**3") ? "x**3" : t.startsWith("x^3") ? "x^3" : null;
+    if (prefix) {
+      const rest = t.slice(prefix.length);
+      let a = 0, b = 0, matched = false;
+      if (rest === "") {
+        matched = true;
+      } else if (/^([+-]\d+\.?\d*)$/.test(rest)) {
+        matched = true;
+        b = parseFloat(rest);
+      } else {
+        const mL = rest.match(/^([+-]\d*\.?\d*)\*?x([+-]\d+\.?\d*)?$/);
+        if (mL) {
+          matched = true;
+          const ac = mL[1];
+          a = ac === "+" || ac === "" ? 1 : ac === "-" ? -1 : parseFloat(ac);
+          if (mL[2]) b = parseFloat(mL[2]);
+        }
+      }
+      if (matched) {
+        const delta = -16 * (4 * a ** 3 + 27 * b ** 2);
+        if (delta === 0) {
+          obs.push({ icon: "△", text: "Curve is singular — discriminant Δ = 0. Proceed with caution." });
+        } else {
+          obs.push({ icon: "○", text: `No singularities detected — discriminant Δ = ${Math.round(Math.abs(delta)).toLocaleString()} ≠ 0.` });
+        }
+      }
+    }
+  } catch (_) { /* skip if expression can't be parsed */ }
+
+  return obs;
+}
 interface HistoryItem {
   id: string; equation: string; nMin: string; nMax: string; nDenom: string;
   xMode: string; xMin: string; xMax: string; pinned: boolean;
@@ -1171,6 +1286,9 @@ ${tableRows}
     return pointFilter === "integer" ? ii : !ii;
   });
 
+  /* ── Arithmetic observations (client-side, instant) ─────────────────── */
+  const arithmeticObs = useMemo(() => computeArithObs(solutions, expr), [solutions, expr]);
+
   /* ── Solutions table rows ─────────────────────────────────────────────── */
   function renderSolutionsTable() {
     const rows: React.ReactNode[] = [];
@@ -1610,6 +1728,21 @@ ${tableRows}
               <div className="n-summary-title">Rational n with integral points</div>
               <div className="n-summary-header"><span className="n-summary-count">{nSummary.length}</span> of {nTested.toLocaleString()} n-values tested:</div>
               <div className="n-chips-row">{nSummary.map((n,i) => <span key={i} className="n-chip">{String(n)}</span>)}</div>
+            </div>
+          )}
+
+          {/* Arithmetic Observations */}
+          {arithmeticObs.length > 0 && (
+            <div className="arith-obs-panel">
+              <div className="arith-obs-header"><span>◇</span> Arithmetic Observations</div>
+              <ul className="arith-obs-list">
+                {arithmeticObs.map((ob, i) => (
+                  <li key={i} className="arith-obs-item">
+                    <span className="arith-obs-icon">{ob.icon}</span>
+                    <span className="arith-obs-text">{ob.text}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
