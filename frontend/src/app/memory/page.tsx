@@ -124,8 +124,9 @@ export default function MemoryPage() {
             </span>
           </Link>
           <nav className="mem-nav">
-            <Link href="/explore" className="mem-nav-link">Explore</Link>
-            <Link href="/app"     className="mem-nav-link">Solver</Link>
+            <Link href="/explore"     className="mem-nav-link">Explore</Link>
+            <Link href="/conjecture"  className="mem-nav-link">Conjecture</Link>
+            <Link href="/app"         className="mem-nav-link">Solver</Link>
             <a
               href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website"
               className="mem-nav-link"

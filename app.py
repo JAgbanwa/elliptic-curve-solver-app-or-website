@@ -3664,6 +3664,430 @@ def api_explore():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+# ── Conjecture Engine helpers ──────────────────────────────────────────────────
+import itertools as _itertools
+from collections import Counter as _Counter
+from math import gcd as _gcd, log as _log
+from functools import reduce as _reduce
+
+_CONJ_MAX_SOLUTIONS = 2000
+
+
+def _conj_collect(eq_str: str, param_str: str, bound: int):
+    """
+    Collect integer solutions as list of {varname: int} dicts.
+    Returns (solutions, var_names).
+
+    Strategy A – fast path: if param_str names a variable that can be solved
+    for analytically, iterate the other variables and compute param.
+    Strategy B – slow path: evaluate expr and check eq == 0 numerically.
+    """
+    import re
+    from sympy import symbols, sympify, expand, solve as sym_solve, lambdify
+
+    if "=" in eq_str:
+        lhs, rhs = eq_str.split("=", 1)
+        eq_str = f"({lhs.strip()}) - ({rhs.strip()})"
+
+    raw_names = sorted(set(re.findall(r"\b([a-zA-Z])\b", eq_str)))
+    _SKIP = {"e", "E"}
+    raw_names = [nm for nm in raw_names if nm not in _SKIP]
+    if not raw_names:
+        return [], []
+
+    var_syms = {nm: symbols(nm, integer=True) for nm in raw_names}
+    try:
+        expr = sympify(eq_str, locals=var_syms)
+        expr = expand(expr)
+    except Exception:
+        return [], raw_names
+
+    free = list(var_syms.values())
+    var_names = list(var_syms.keys())
+    n = len(free)
+
+    param_sym = var_syms.get(param_str) if param_str else None
+    search_syms = [v for v in free if v != param_sym] if param_sym else free
+    search_names = [str(v) for v in search_syms]
+    ns = len(search_syms)
+
+    solutions: list = []
+
+    # ── Strategy A: solve for param ──────────────────────────────────────────
+    if param_sym and ns > 0:
+        try:
+            param_exprs = sym_solve(expr, param_sym)
+        except Exception:
+            param_exprs = []
+
+        if param_exprs:
+            lfs = []
+            for pe in param_exprs:
+                try:
+                    lfs.append(lambdify(search_syms, pe, modules="math"))
+                except Exception:
+                    pass
+
+            B = min(bound, 120 if ns == 1 else 60 if ns == 2 else 20)
+            for combo in _itertools.product(range(-B, B + 1), repeat=ns):
+                if len(solutions) >= _CONJ_MAX_SOLUTIONS:
+                    break
+                for lf in lfs:
+                    try:
+                        val = lf(*combo)
+                        if isinstance(val, (int, float)) and abs(val - round(val)) < 1e-9:
+                            entry = {nm: int(c) for nm, c in zip(search_names, combo)}
+                            entry[param_str] = int(round(val))
+                            solutions.append(entry)
+                            break
+                    except Exception:
+                        pass
+
+            if solutions:
+                return solutions, var_names
+
+    # ── Strategy B: numeric check ────────────────────────────────────────────
+    fn = _explore_eval_fast(expr, free)
+    B = min(bound, 80 if n == 1 else 40 if n == 2 else 15 if n == 3 else 8)
+    for combo in _itertools.product(range(-B, B + 1), repeat=n):
+        if len(solutions) >= _CONJ_MAX_SOLUTIONS:
+            break
+        try:
+            v = fn(*combo)
+            ok = abs(v) < 0.5 if isinstance(v, float) else int(round(v)) == 0
+            if ok:
+                solutions.append(dict(zip(var_names, combo)))
+        except Exception:
+            pass
+
+    return solutions, var_names
+
+
+def _conj_param_solvability(solutions: list, param_str: str):
+    """Which residue classes of param are solvable?  (Most powerful detector.)"""
+    if not param_str or not solutions:
+        return []
+    pvals = [s[param_str] for s in solutions if param_str in s]
+    if len(pvals) < 8:
+        return []
+    solvable = sorted(set(pvals))
+    if len(solvable) < 6:
+        return []
+
+    conjectures = []
+    for m in [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 24]:
+        counts = _Counter(v % m for v in solvable)
+        present = set(counts.keys())
+        forbidden = sorted(set(range(m)) - present)
+        if not forbidden:
+            continue
+        # Require ≥ half the residues to be represented before claiming exclusions
+        if len(present) < m // 2:
+            continue
+        # Require each present residue class to have ≥ 2 representatives
+        if min(counts.values()) < 2:
+            continue
+        present_str = ", ".join(str(r) for r in sorted(present))
+        forb_str = ", ".join(str(r) for r in forbidden)
+        conf = "strong" if len(solvable) >= 20 and min(counts.values()) >= 3 else "moderate"
+        conjectures.append({
+            "type": "modular",
+            "confidence": conf,
+            "statement": (
+                f"The equation is unsolvable when {param_str} ≡ {{{forb_str}}} (mod {m}). "
+                f"Only {param_str} ≡ {{{present_str}}} (mod {m}) yields solutions."
+            ),
+            "evidence": (
+                f"{len(solvable)} solvable values of {param_str} found; "
+                f"residue distribution (mod {m}): {dict(sorted(counts.items()))}"
+            ),
+            "formula": f"{param_str} mod {m} ∈ {{{present_str}}}",
+        })
+
+    # Keep the most restrictive (largest fraction of forbidden residues per modulus)
+    def _restriction(c):
+        import re as _re
+        m_m = _re.search(r"\(mod (\d+)\)", c["formula"])
+        a_m = _re.search(r"\{([^}]+)\}", c["formula"])
+        if m_m and a_m:
+            m_ = int(m_m.group(1))
+            allowed = len(a_m.group(1).split(","))
+            return allowed / m_
+        return 1.0
+
+    conjectures.sort(key=_restriction)
+    # Deduplicate by similar restriction level
+    seen_r, filtered = set(), []
+    for c in conjectures:
+        r = round(_restriction(c) * 10)
+        if r not in seen_r:
+            seen_r.add(r)
+            filtered.append(c)
+    return filtered[:4]
+
+
+def _conj_modular(solutions: list, var_names: list):
+    """Detect if individual variables are restricted to certain residue classes."""
+    if not solutions or not var_names:
+        return []
+    conjectures = []
+    for var in var_names:
+        vals = [s[var] for s in solutions if var in s]
+        if len(vals) < 8:
+            continue
+        best = None  # (ratio, conjecture)
+        for m in [2, 3, 4, 5, 7, 8, 12, 16]:
+            counts = _Counter(v % m for v in vals)
+            present = set(counts.keys())
+            if len(present) == m or len(present) > m * 3 // 4:
+                continue
+            if min(counts.values()) < 2:
+                continue
+            forbidden = sorted(set(range(m)) - present)
+            if not forbidden:
+                continue
+            present_str = ", ".join(str(r) for r in sorted(present))
+            conf = "strong" if len(vals) >= 20 and len(present) <= m // 2 else "moderate"
+            ratio = len(present) / m
+            c = {
+                "type": "modular",
+                "confidence": conf,
+                "statement": (
+                    f"{var} ≡ {{{present_str}}} (mod {m}) in all solutions found — "
+                    f"residues {{{', '.join(str(r) for r in forbidden)}}} never appear."
+                ),
+                "evidence": (
+                    f"{len(vals)} solutions; distribution (mod {m}): "
+                    + ", ".join(f"{r}→{cnt}" for r, cnt in sorted(counts.items()))
+                ),
+                "formula": f"{var} mod {m} ∈ {{{present_str}}}",
+            }
+            if best is None or ratio < best[0]:
+                best = (ratio, c)
+        if best and best[0] < 0.75:
+            conjectures.append(best[1])
+    return conjectures[:4]
+
+
+def _conj_gcd_invariant(solutions: list, var_names: list):
+    """Detect GCD invariants across variable components."""
+    if len(solutions) < 6 or len(var_names) < 2:
+        return []
+    gcds = []
+    for s in solutions:
+        nonzero = [abs(s[v]) for v in var_names if v in s and s[v] != 0]
+        if nonzero:
+            gcds.append(_reduce(_gcd, nonzero))
+    if not gcds:
+        return []
+    total = len(gcds)
+    if all(g == 1 for g in gcds):
+        return [{
+            "type": "invariant",
+            "confidence": "strong" if total >= 12 else "moderate",
+            "statement": (
+                f"All {total} solutions found are primitive: "
+                f"gcd({', '.join(var_names)}) = 1. "
+                "No composite (scaled) solutions appear in this range."
+            ),
+            "evidence": f"{total} solutions checked; all have gcd = 1.",
+            "formula": f"gcd({', '.join(var_names)}) = 1",
+        }]
+    min_g = min(gcds)
+    if min_g > 1:
+        return [{
+            "type": "invariant",
+            "confidence": "moderate",
+            "statement": (
+                f"No primitive solutions found — all {total} solutions have "
+                f"gcd({', '.join(var_names)}) ≥ {min_g}."
+            ),
+            "evidence": f"gcd values: min = {min_g}, max = {max(gcds)}.",
+            "formula": f"gcd({', '.join(var_names)}) ≥ {min_g}",
+        }]
+    return []
+
+
+def _conj_density(solutions: list, var_names: list, bound: int):
+    """Estimate asymptotic growth rate of solution count."""
+    if len(solutions) < 14:
+        return []
+    maxabs = sorted(
+        max(abs(s[v]) for v in var_names if v in s)
+        for s in solutions
+        if any(v in s for v in var_names)
+    )
+    thresholds = [t for t in [3, 5, 8, 10, 15, 20, 30, 50, 75, 100, 150, 200]
+                  if t <= max(maxabs)]
+    counts = [(t, sum(1 for m in maxabs if m <= t)) for t in thresholds]
+    counts = [(t, c) for t, c in counts if c > 0]
+    if len(counts) < 4:
+        return []
+    log_t = [_log(t) for t, _ in counts]
+    log_c = [_log(c) for _, c in counts]
+    nn = len(log_t)
+    sx = sum(log_t); sy = sum(log_c)
+    sxy = sum(x * y for x, y in zip(log_t, log_c))
+    sx2 = sum(x ** 2 for x in log_t)
+    denom = nn * sx2 - sx * sx
+    if abs(denom) < 1e-12:
+        return []
+    k = (nn * sxy - sx * sy) / denom
+    b = (sy - k * sx) / nn
+    residuals = [log_c[i] - (k * log_t[i] + b) for i in range(nn)]
+    rmse = (sum(r ** 2 for r in residuals) / nn) ** 0.5
+    if rmse > 0.3 or k <= 0:
+        return []
+    fracs = [(1, 3), (1, 2), (2, 3), (1, 1), (4, 3), (3, 2), (2, 1), (5, 2), (3, 1)]
+    p, q = min(fracs, key=lambda f: abs(k - f[0] / f[1]))
+    k_nice = p / q
+    if abs(k - k_nice) > 0.25:
+        k_str = f"N^{k:.2f}"
+    elif q == 1:
+        k_str = "N" if p == 1 else f"N^{p}"
+    else:
+        k_str = f"N^({p}/{q})"
+    return [{
+        "type": "asymptotic",
+        "confidence": "moderate" if rmse < 0.15 else "weak",
+        "statement": (
+            f"Solution count up to bound N grows approximately as {k_str}. "
+            "This hints at the geometry of the integer solution space."
+        ),
+        "evidence": (
+            "Counts: " + ", ".join(f"N={t}→{c}" for t, c in counts[:5])
+            + f";  power-law exponent k ≈ {k:.2f} (RMSE {rmse:.2f})."
+        ),
+        "formula": f"#{{solutions, max|var| ≤ N}} ~ C · {k_str}",
+    }]
+
+
+def _conj_relationships(solutions: list, var_names: list):
+    """Detect parity / modular relationships between pairs of variables."""
+    if len(solutions) < 8 or len(var_names) < 2:
+        return []
+    conjectures = []
+    checked: set = set()
+    for v1, v2 in _itertools.combinations(var_names, 2):
+        pairs = [(s[v1], s[v2]) for s in solutions if v1 in s and v2 in s]
+        if len(pairs) < 8:
+            continue
+        # Same parity?
+        if all((a - b) % 2 == 0 for a, b in pairs):
+            key = f"same_par_{v1}{v2}"
+            if key not in checked:
+                checked.add(key)
+                conjectures.append({
+                    "type": "modular",
+                    "confidence": "strong" if len(pairs) >= 12 else "moderate",
+                    "statement": f"{v1} and {v2} always have the same parity: {v1} ≡ {v2} (mod 2).",
+                    "evidence": f"{len(pairs)} solution pairs checked.",
+                    "formula": f"{v1} ≡ {v2} (mod 2)",
+                })
+        elif all((a + b) % 2 == 1 for a, b in pairs):
+            key = f"opp_par_{v1}{v2}"
+            if key not in checked:
+                checked.add(key)
+                conjectures.append({
+                    "type": "modular",
+                    "confidence": "strong" if len(pairs) >= 12 else "moderate",
+                    "statement": f"{v1} and {v2} always have opposite parity: {v1} + {v2} ≡ 1 (mod 2).",
+                    "evidence": f"{len(pairs)} solution pairs checked.",
+                    "formula": f"{v1} + {v2} ≡ 1 (mod 2)",
+                })
+        # Sum divisibility
+        sums_int = [a + b for a, b in pairs]
+        for m in [3, 4, 6]:
+            res_set = set(s_ % m for s_ in sums_int)
+            if len(res_set) == 1:
+                r = next(iter(res_set))
+                key = f"sum_{v1}{v2}_m{m}"
+                if key not in checked:
+                    checked.add(key)
+                    conjectures.append({
+                        "type": "modular",
+                        "confidence": "moderate",
+                        "statement": f"{v1} + {v2} ≡ {r} (mod {m}) for all solutions found.",
+                        "evidence": f"{len(pairs)} solution pairs; all have {v1}+{v2} ≡ {r} (mod {m}).",
+                        "formula": f"{v1} + {v2} ≡ {r} (mod {m})",
+                    })
+    return conjectures[:3]
+
+
+# ── Conjecture Engine endpoint ─────────────────────────────────────────────────
+
+@app.route("/api/conjecture", methods=["POST"])
+def api_conjecture():
+    """
+    Conjecture Engine: collect integer solutions of any Diophantine equation
+    and surface plausible mathematical conjectures (modular obstructions,
+    invariants, asymptotics, inter-variable relationships).
+
+    Request body (JSON):
+        {
+          "equation": "x**2 + y**2 - n",
+          "param":    "n",    # optional
+          "bound":    50      # search bound [5..200]
+        }
+    """
+    import re
+    data = request.get_json(silent=True) or {}
+    eq_str = (data.get("equation") or "").strip()
+    param_str = (data.get("param") or "").strip()
+    bound = max(5, min(int(data.get("bound") or 50), 200))
+
+    if not eq_str:
+        return jsonify({"ok": False, "error": "No equation provided."}), 400
+
+    try:
+        solutions, var_names = _conj_collect(eq_str, param_str, bound)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Collection error: {exc}"}), 500
+
+    non_param = [v for v in var_names if v != param_str] if param_str else var_names
+
+    if not solutions:
+        return jsonify({
+            "ok": True,
+            "conjectures": [],
+            "solution_count": 0,
+            "var_names": var_names,
+            "sample": [],
+            "message": (
+                f"No integer solutions found within bound {bound}. "
+                "Try a larger bound, or visit the Explore page to check for "
+                "provable congruence obstructions."
+            ),
+        })
+
+    all_conjectures: list = []
+    all_conjectures.extend(_conj_param_solvability(solutions, param_str))
+    all_conjectures.extend(_conj_modular(solutions, non_param))
+    all_conjectures.extend(_conj_gcd_invariant(solutions, non_param))
+    all_conjectures.extend(_conj_density(solutions, var_names, bound))
+    all_conjectures.extend(_conj_relationships(solutions, non_param))
+
+    # Deduplicate by formula prefix
+    seen: set = set()
+    unique: list = []
+    for c in all_conjectures:
+        key = (c.get("formula") or c.get("statement", ""))[:80]
+        if key not in seen:
+            seen.add(key)
+            unique.append(c)
+
+    _order = {"strong": 0, "moderate": 1, "weak": 2}
+    unique.sort(key=lambda c: _order.get(c.get("confidence", "weak"), 2))
+
+    return jsonify({
+        "ok": True,
+        "conjectures": unique[:12],
+        "solution_count": len(solutions),
+        "var_names": var_names,
+        "sample": solutions[:6],
+    })
+
+
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5001))

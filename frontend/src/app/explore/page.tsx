@@ -130,6 +130,7 @@ export default function ExplorePage() {
           </Link>
           <nav className="explore-nav">
             <Link href="/app" className="explore-nav-link">← Solver</Link>
+            <Link href="/conjecture" className="explore-nav-link">Conjecture</Link>
             <Link href="/memory" className="explore-nav-link">Memory</Link>
             <a
               href="https://github.com/JAgbanwa/elliptic-curve-solver-app-or-website"

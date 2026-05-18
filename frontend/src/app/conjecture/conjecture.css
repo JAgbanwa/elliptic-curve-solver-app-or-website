@@ -1,0 +1,391 @@
+/* ── Conjecture Engine page (conj-* namespace) ───────────────────────────────*/
+
+.conj-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+.conj-header {
+  border-bottom: 1.5px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.conj-header-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.conj-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+}
+.conj-logo-icon  { font-size: 1.1rem; }
+.conj-logo-title { font-size: .86rem; font-weight: 700; display: block; line-height: 1.2; }
+.conj-logo-sub   { font-size: .66rem; color: var(--text-dim); display: block; }
+.conj-nav { display: flex; align-items: center; gap: 14px; }
+.conj-nav-link { font-size: .76rem; color: var(--text-dim); text-decoration: none; transition: color .1s; }
+.conj-nav-link:hover { color: var(--text); }
+.conj-theme-btn {
+  font-size: .72rem; background: none; border: 1px solid var(--border);
+  color: var(--text-dim); padding: 3px 9px; cursor: pointer;
+  transition: color .1s, border-color .1s;
+}
+.conj-theme-btn:hover { color: var(--text); border-color: var(--text); }
+
+/* ── Main ── */
+.conj-main {
+  flex: 1;
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 40px 24px 64px;
+}
+
+/* ── Hero ── */
+.conj-hero { margin-bottom: 32px; }
+.conj-title { font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 8px; }
+.conj-subtitle {
+  font-size: .82rem; color: var(--text-dim); line-height: 1.7;
+  max-width: 620px; margin: 0 0 10px;
+}
+.conj-bullets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.conj-bullets li { font-size: .72rem; color: var(--text-dim); }
+.conj-bullets li::before { content: "→ "; font-family: var(--font-mono, "Courier New", monospace); }
+
+/* ── Input block ── */
+.conj-input-block {
+  border: 1.5px solid var(--border);
+  padding: 20px;
+  margin-bottom: 24px;
+  background: var(--surface);
+}
+.conj-input-label {
+  display: block;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.conj-eq-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+  font-family: var(--font-mono, "Courier New", monospace);
+  outline: none;
+  transition: border-color .15s;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+.conj-eq-input:focus { border-color: var(--text); }
+.conj-params-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.conj-param-field { display: flex; flex-direction: column; gap: 4px; }
+.conj-param-field--sm { width: 110px; }
+.conj-param-field--bound { width: 90px; }
+.conj-param-input {
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: .82rem;
+  font-family: var(--font-mono, "Courier New", monospace);
+  outline: none;
+  transition: border-color .15s;
+  box-sizing: border-box;
+}
+.conj-param-input:focus { border-color: var(--text); }
+.conj-run-btn {
+  padding: 10px 24px;
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  cursor: pointer;
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  transition: opacity .1s;
+  align-self: flex-end;
+}
+.conj-run-btn:hover:not(:disabled) { opacity: .82; }
+.conj-run-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Examples */
+.conj-examples-label {
+  font-size: .64rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  display: block;
+}
+.conj-examples-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.conj-example-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: .68rem;
+  cursor: pointer;
+  font-family: var(--font-mono, "Courier New", monospace);
+  transition: all .1s;
+  white-space: nowrap;
+}
+.conj-example-btn:hover { border-color: var(--text); color: var(--text); }
+
+/* ── Loading ── */
+.conj-loading {
+  border: 1.5px solid var(--border);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  background: var(--surface);
+}
+.conj-loading-msg {
+  font-size: .78rem;
+  font-family: var(--font-mono, "Courier New", monospace);
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+.conj-loading-bar {
+  height: 2px;
+  background: var(--border);
+  overflow: hidden;
+  position: relative;
+}
+.conj-loading-bar::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -40%;
+  width: 40%;
+  height: 100%;
+  background: var(--text);
+  animation: conj-slide 1.4s ease-in-out infinite;
+}
+@keyframes conj-slide {
+  0%   { left: -40%; }
+  100% { left: 110%; }
+}
+
+/* ── Error ── */
+.conj-error {
+  border: 1.5px solid #c00;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  font-size: .78rem;
+  color: #c00;
+}
+
+/* ── Results ── */
+.conj-results {}
+
+/* Summary row */
+.conj-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.conj-summary-stat { font-size: .72rem; color: var(--text-dim); }
+.conj-summary-stat strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Sample solutions */
+.conj-sample {
+  margin-bottom: 20px;
+}
+.conj-sample-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  font-size: .72rem;
+  color: var(--text-dim);
+  user-select: none;
+  transition: background .1s;
+}
+.conj-sample-toggle:hover { background: var(--surface); }
+.conj-sample-body {
+  border: 1px solid var(--border);
+  border-top: none;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.conj-sample-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.conj-sample-item {
+  font-size: .72rem;
+  font-family: var(--font-mono, "Courier New", monospace);
+  color: var(--text-dim);
+  padding: 2px 0;
+}
+
+/* Empty state */
+.conj-empty {
+  border: 1.5px solid var(--border);
+  padding: 32px 24px;
+  text-align: center;
+  font-size: .80rem;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+/* ── Conjecture list ── */
+.conj-section-title {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+
+.conj-list { display: flex; flex-direction: column; gap: 12px; }
+
+/* ── Conjecture card ── */
+.conj-card {
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+.conj-card--strong {
+  border-left: 5px solid var(--text);
+  background: var(--surface);
+}
+.conj-card--moderate {
+  border-left: 3px solid var(--text);
+}
+.conj-card--weak {
+  border-left: 2px dashed var(--border);
+  opacity: .85;
+}
+
+.conj-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px 6px;
+  flex-wrap: wrap;
+}
+.conj-confidence {
+  font-size: .68rem;
+  font-weight: 700;
+  font-family: var(--font-mono, "Courier New", monospace);
+  color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.conj-type-badge {
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.conj-save-btn {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: .64rem;
+  cursor: pointer;
+  transition: all .1s;
+  flex-shrink: 0;
+}
+.conj-save-btn:hover { color: var(--text); border-color: var(--text); }
+.conj-save-btn--saved { color: var(--text); border-color: var(--text); opacity: .6; cursor: default; }
+
+.conj-statement {
+  font-size: .86rem;
+  font-weight: 600;
+  line-height: 1.6;
+  padding: 6px 16px 8px;
+  margin: 0;
+}
+.conj-formula {
+  font-family: var(--font-mono, "Courier New", monospace);
+  font-size: .78rem;
+  padding: 6px 12px;
+  background: var(--surface2);
+  color: var(--text);
+  margin: 0 16px 8px;
+  display: inline-block;
+}
+.conj-evidence-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 12px;
+  cursor: pointer;
+  font-size: .68rem;
+  color: var(--text-dim);
+  user-select: none;
+  background: none;
+  border: none;
+  text-align: left;
+}
+.conj-evidence-toggle:hover { color: var(--text); }
+.conj-evidence {
+  margin: 0 16px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  font-size: .70rem;
+  font-family: var(--font-mono, "Courier New", monospace);
+  color: var(--text-dim);
+  line-height: 1.65;
+  background: var(--surface);
+  word-break: break-word;
+}
+
+/* ── Footer ── */
+.conj-footer {
+  border-top: 1px solid var(--border);
+  padding: 14px 24px;
+  text-align: center;
+  font-size: .70rem;
+  color: var(--text-dim);
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .conj-main { padding: 24px 16px 48px; }
+  .conj-header-inner { padding: 0 16px; }
+  .conj-params-row { flex-direction: column; }
+  .conj-param-field--sm,
+  .conj-param-field--bound { width: 100%; }
+}
