@@ -1053,6 +1053,15 @@ export default function SolverPage() {
     for (const seg of neg_segments) drawSeg(seg);
 
     const isInt = (v: string | number) => { const vs = String(v); return !vs.includes("/") && Number.isFinite(Number(vs)) && Number.isInteger(Number(vs)); };
+    // Correctly evaluate fraction strings like "106/9" — parseFloat alone would just read the numerator
+    const parseFrac = (v: string | number): number => {
+      const s = String(v);
+      const slash = s.indexOf("/");
+      if (slash === -1) return parseFloat(s);
+      const num = parseFloat(s.slice(0, slash));
+      const den = parseFloat(s.slice(slash + 1));
+      return den !== 0 ? num / den : NaN;
+    };
     const f = filterRef.current;
     const visSols = plotSolsRef.current.filter(s => {
       if (f === "all") return true;
@@ -1071,7 +1080,7 @@ export default function SolverPage() {
       }
       ctx.globalAlpha = 0.32;
       for (const { x, y } of visSols) {
-        const fx = parseFloat(String(x)), fy = parseFloat(String(y));
+        const fx = parseFrac(x), fy = parseFrac(y);
         if (!Number.isFinite(fx) || !Number.isFinite(fy) || fy === 0) continue;
         const rpx = tx(fx), rpy = ty(-fy);
         if (rpy < PAD.T || rpy > PAD.T+PH) continue;
@@ -1086,7 +1095,7 @@ export default function SolverPage() {
 
     /* ── Points: integer (■) vs rational (○) ── */
     for (const { x, y } of visSols) {
-      const fx = parseFloat(String(x)), fy = parseFloat(String(y));
+      const fx = parseFrac(x), fy = parseFrac(y);
       if (!Number.isFinite(fx) || !Number.isFinite(fy)) continue;
       const px = tx(fx), py = ty(fy);
       const isIntPt = isInt(x) && isInt(y);
@@ -1102,7 +1111,10 @@ export default function SolverPage() {
         ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
       }
       if (showLabelsRef.current) {
-        const label = `(${fmtNum(fx)}, ${fmtNum(fy)})`;
+        // For rational non-integers, preserve the exact fraction string in the label
+        const lx_str = isIntPt ? fmtNum(fx) : String(x);
+        const ly_str = isIntPt ? fmtNum(fy) : String(y);
+        const label = `(${lx_str}, ${ly_str})`;
         ctx.font = "bold 11px sans-serif";
         const tw = ctx.measureText(label).width;
         let lx = px+10, ly = py-10;
