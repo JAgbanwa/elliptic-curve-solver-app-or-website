@@ -29,7 +29,7 @@ export default function LandingPage() {
             color: "var(--text)",
           }}
         >
-          ∮ <span style={{ color: "var(--text-dim)" }}>Elliptic Curve Solver</span>
+          ∮ <span style={{ color: "var(--text-dim)" }}>Diophantix</span>
         </a>
         <nav style={{ display: "flex", gap: "32px", alignItems: "center" }}>
           <a
@@ -347,7 +347,7 @@ export default function LandingPage() {
             color: "var(--text-dim)",
           }}
         >
-          © 2026 &nbsp;Elliptic Curve Solver &nbsp;— &nbsp;open source
+          © 2026 &nbsp;Diophantix &nbsp;— &nbsp;open source
         </span>
         <div style={{ display: "flex", gap: "24px" }}>
           <a

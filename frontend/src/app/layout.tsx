@@ -3,9 +3,9 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Elliptic Curve Solver",
+  title: "Diophantix",
   description:
-    "Search for integer points on parametric elliptic curve families. Define any y² = f(n, x), set your range, stream results in real time.",
+    "Search for integer and rational points on parametric elliptic curve families. Define any y² = f(n, x), set your range, stream results in real time.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
