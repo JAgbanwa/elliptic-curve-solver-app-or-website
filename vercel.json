@@ -1,3 +1,17 @@
 {
-  "rootDirectory": "frontend"
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/next"
+    },
+    {
+      "src": "app.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/app.py" },
+    { "src": "/static/(.*)", "dest": "/app.py" }
+  ]
 }
+
