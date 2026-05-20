@@ -1,6 +1,6 @@
 "use client";
 import "./explore.css";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTheme } from "@/components/ThemeProvider";
@@ -47,7 +47,7 @@ const GithubIcon = () => (
 );
 
 /* ── Main page component ─────────────────────────────────────────────────────── */
-export default function ExplorePage() {
+function ExplorePageContent() {
   const { theme, toggle } = useTheme();
   const searchParams = useSearchParams();
 
@@ -333,5 +333,13 @@ export default function ExplorePage() {
         Flask · SymPy · Next.js
       </footer>
     </div>
+  );
+}
+
+export default function ExplorePage() {
+  return (
+    <Suspense>
+      <ExplorePageContent />
+    </Suspense>
   );
 }
